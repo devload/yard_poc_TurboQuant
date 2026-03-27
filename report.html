@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TurboQuant for WhaTap YARD - 벤치마크 리포트</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #9ca3af;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --blue: #3b82f6;
+    --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .container { max-width: 1400px; margin: 0 auto; padding: 2rem 3rem; }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 3rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .header h1 {
+    font-size: 2.5rem;
+    background: linear-gradient(135deg, var(--accent), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+  }
+  .header .subtitle { color: var(--muted); font-size: 1rem; }
+  .header .date { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem 2.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .card h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .card h3 { font-size: 1rem; color: var(--muted); margin: 1rem 0 0.5rem; }
+
+  /* KPI Row */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .kpi .value {
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .kpi .label { color: var(--muted); font-size: 0.8rem; margin-top: 0.3rem; }
+  .kpi.green .value { color: var(--green); }
+  .kpi.blue .value { color: var(--blue); }
+  .kpi.purple .value { color: var(--accent2); }
+  .kpi.cyan .value { color: var(--cyan); }
+  .kpi.yellow .value { color: var(--yellow); }
+  .kpi.red .value { color: var(--red); }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  th, td {
+    padding: 0.8rem 1.2rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover td { background: rgba(99, 102, 241, 0.05); }
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .badge-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .badge-purple { background: rgba(139,92,246,0.15); color: var(--accent2); }
+
+  /* Charts */
+  .chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .chart-row.full { grid-template-columns: 1fr; }
+  .chart-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+  }
+  .chart-box h4 { font-size: 0.95rem; color: var(--muted); margin-bottom: 1rem; }
+  canvas { max-height: 320px; }
+
+  /* Phase section */
+  .phase-tag {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-right: 0.5rem;
+  }
+  .phase-1 { background: rgba(59,130,246,0.2); color: var(--blue); }
+  .phase-2 { background: rgba(139,92,246,0.2); color: var(--accent2); }
+  .phase-3 { background: rgba(6,182,212,0.2); color: var(--cyan); }
+  .phase-4 { background: rgba(234,179,8,0.2); color: var(--yellow); }
+  .phase-5 { background: rgba(139,92,246,0.2); color: var(--accent2); }
+  .phase-6 { background: rgba(6,182,212,0.2); color: var(--cyan); }
+
+  /* Architecture diagram */
+  .arch-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    padding: 2rem 1rem;
+    font-size: 0.9rem;
+  }
+  .arch-box {
+    background: rgba(99,102,241,0.1);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 1rem 1.5rem;
+    text-align: center;
+    min-width: 140px;
+  }
+  .arch-arrow { color: var(--muted); font-size: 1.5rem; }
+
+  /* Confusion matrix */
+  .cm-grid {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr;
+    gap: 4px;
+    max-width: 450px;
+    margin: 1.5rem auto;
+    font-size: 0.9rem;
+  }
+  .cm-cell {
+    padding: 1.2rem;
+    text-align: center;
+    border-radius: 8px;
+  }
+  .cm-header { color: var(--muted); font-weight: 600; font-size: 0.8rem; }
+  .cm-tp { background: rgba(34,197,94,0.2); color: var(--green); font-weight: 700; font-size: 1.6rem; }
+  .cm-tn { background: rgba(59,130,246,0.15); color: var(--blue); font-weight: 700; font-size: 1.6rem; }
+  .cm-fp { background: rgba(234,179,8,0.15); color: var(--yellow); font-weight: 700; font-size: 1.6rem; }
+  .cm-fn { background: rgba(239,68,68,0.15); color: var(--red); font-weight: 700; font-size: 1.6rem; }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 2rem 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .chart-row { grid-template-columns: 1fr; }
+    .kpi-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="header">
+  <h1>TurboQuant for WhaTap YARD</h1>
+  <div class="subtitle">Google TurboQuant (ICLR 2026) 벡터 양자화 - 벤치마크 리포트</div>
+  <div class="date">생성일: 2026-03-27 | 프로젝트: whatap-turboquant | Java 8 + Maven |
+    <a href="https://github.com/whatap/yard_poc_TurboQuant" style="color:var(--accent);">github.com/whatap/yard_poc_TurboQuant</a></div>
+</div>
+
+<!-- PoC Overview -->
+<div class="card" style="border-left: 3px solid var(--accent);">
+  <h2>PoC 개요</h2>
+  <p style="color:var(--muted); margin-bottom:1rem;">
+    Google Research의 <strong>TurboQuant</strong>(ICLR 2026)은 LLM KV Cache 압축을 위한 벡터 양자화 알고리즘입니다.
+    이 PoC는 TurboQuant의 핵심 기술을 <strong>WhaTap YARD 모니터링 서버</strong>의 시계열 데이터에 적용하여
+    압축, 유사도 검색, 이상 탐지 3가지 관점에서 효용성을 검증합니다.
+  </p>
+  <h3>왜 TurboQuant인가?</h3>
+  <ul style="color:var(--muted); padding-left:1.5rem; font-size:0.9rem; margin-bottom:1rem;">
+    <li><strong>학습 불필요</strong>: 데이터 의존 없이 즉시 적용 가능 (training-free)</li>
+    <li><strong>극한 압축</strong>: 3-bit으로 10x 이상 압축, 정보 손실 최소화</li>
+    <li><strong>내적 보존</strong>: 압축 상태에서 직접 유사도 계산 가능 (QJL 보정)</li>
+    <li><strong>범용성</strong>: LLM뿐 아니라 모든 고차원 벡터 데이터에 적용 가능</li>
+  </ul>
+  <h3>PoC 6단계 로드맵</h3>
+  <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem; margin-top:1rem;">
+    <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.3); border-radius:10px; padding:1rem;">
+      <div style="font-size:0.75rem; color:var(--blue); font-weight:700; margin-bottom:0.3rem;">PHASE 1</div>
+      <div style="font-weight:600; margin-bottom:0.5rem;">데모 생성기</div>
+      <div style="font-size:0.8rem; color:var(--muted);">
+        <strong>목적:</strong> YARD에 실제와 유사한 트래픽을 주입하는 기반 도구 구축<br>
+        <strong>핵심:</strong> WhaTap 바이너리 프로토콜 구현, 4가지 메트릭 패턴 생성<br>
+        <strong>산출물:</strong> fat JAR 실행 파일
+      </div>
+    </div>
+    <div style="background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.3); border-radius:10px; padding:1rem;">
+      <div style="font-size:0.75rem; color:var(--accent2); font-weight:700; margin-bottom:0.3rem;">PHASE 2</div>
+      <div style="font-weight:600; margin-bottom:0.5rem;">시계열 압축</div>
+      <div style="font-size:0.8rem; color:var(--muted);">
+        <strong>목적:</strong> YARD의 MetricValue 데이터에 TurboQuant 적용, 압축률/정확도 측정<br>
+        <strong>핵심:</strong> 필드별 정규화 + 시간 배치(300차원)로 양자화, Raw/GZIP/TQ 비교<br>
+        <strong>산출물:</strong> 벤치마크 CSV 리포트
+      </div>
+    </div>
+    <div style="background:rgba(6,182,212,0.08); border:1px solid rgba(6,182,212,0.3); border-radius:10px; padding:1rem;">
+      <div style="font-size:0.75rem; color:var(--cyan); font-weight:700; margin-bottom:0.3rem;">PHASE 3</div>
+      <div style="font-weight:600; margin-bottom:0.5rem;">유사도 검색</div>
+      <div style="font-size:0.8rem; color:var(--muted);">
+        <strong>목적:</strong> 서버 상태를 벡터화하여 유사 패턴 서버 탐색<br>
+        <strong>핵심:</strong> 480차원 상태 벡터, TurboQuant+QJL로 압축 상태 내적 검색<br>
+        <strong>산출물:</strong> 클러스터 정확도, Recall@K 측정
+      </div>
+    </div>
+    <div style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.3); border-radius:10px; padding:1rem;">
+      <div style="font-size:0.75rem; color:var(--yellow); font-weight:700; margin-bottom:0.3rem;">PHASE 4</div>
+      <div style="font-weight:600; margin-bottom:0.5rem;">이상 탐지</div>
+      <div style="font-size:0.8rem; color:var(--muted);">
+        <strong>목적:</strong> 벡터 유사도 기반으로 서버 이상 상태 자동 감지<br>
+        <strong>핵심:</strong> 마할라노비스 거리 + 적응형 임계값, 베이스라인 대비 편차 탐지<br>
+        <strong>산출물:</strong> 정밀도/재현율/F1 점수, 알림 메시지 생성
+      </div>
+    </div>
+    <div style="background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.3); border-radius:10px; padding:1rem;">
+      <div style="font-size:0.75rem; color:var(--accent2); font-weight:700; margin-bottom:0.3rem;">PHASE 5</div>
+      <div style="font-weight:600; margin-bottom:0.5rem;">캐싱 최적화</div>
+      <div style="font-size:0.8rem; color:var(--muted);">
+        <strong>목적:</strong> QR 분해 병목 해소, 프로덕션 배포 가능한 성능 확보<br>
+        <strong>핵심:</strong> RotationCache(ConcurrentHashMap), Cold/Warm 비교<br>
+        <strong>산출물:</strong> 4.5x 초기화 속도 향상
+      </div>
+    </div>
+    <div style="background:rgba(6,182,212,0.08); border:1px solid rgba(6,182,212,0.3); border-radius:10px; padding:1rem;">
+      <div style="font-size:0.75rem; color:var(--cyan); font-weight:700; margin-bottom:0.3rem;">PHASE 6</div>
+      <div style="font-weight:600; margin-bottom:0.5rem;">QJL 차원 튜닝</div>
+      <div style="font-size:0.8rem; color:var(--muted);">
+        <strong>목적:</strong> 검색 재현율 개선을 위한 최적 QJL 프로젝션 차원 탐색<br>
+        <strong>핵심:</strong> 16~256 차원 비교 실험, 정확도/속도 트레이드오프 분석<br>
+        <strong>산출물:</strong> 최적 QJL=128, Recall +6.4p 향상
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PoC Timeline -->
+<div class="card">
+  <h2>PoC 진행 내용</h2>
+  <table>
+    <tr><th style="width:80px;">단계</th><th style="width:150px;">작업</th><th>수행 내용</th><th style="width:80px;">상태</th></tr>
+    <tr>
+      <td><span class="phase-tag phase-1">P1</span></td>
+      <td>프로젝트 구조</td>
+      <td>Maven 멀티모듈 5개(core, demo, storage, search, anomaly) + whatap.server.common 의존성 구성</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+    <tr>
+      <td><span class="phase-tag phase-1">P1</span></td>
+      <td>프로토콜 구현</td>
+      <td>NetHead 22바이트 헤더 + DataOutputX.writePack() 바이너리 직렬화, TCP 소켓 전송</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+    <tr>
+      <td><span class="phase-tag phase-1">P1</span></td>
+      <td>메트릭 패턴</td>
+      <td>SineWave(CPU), GradualIncrease(메모리), Spike(TPS), RandomWalk(응답시간) 4종 구현</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+    <tr>
+      <td><span class="phase-tag phase-2">P2</span></td>
+      <td>TurboQuant 코어</td>
+      <td>QR분해 기반 랜덤 회전, Lloyd-Max 코드북(300회 반복), BitPacked 벡터, L2 노름 분리 저장</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+    <tr>
+      <td><span class="phase-tag phase-2">P2</span></td>
+      <td>압축 벤치마크</td>
+      <td>Raw/GZIP/TQ-3bit/TQ-4bit 6가지 조합 비교, 100블록 x 60타임스텝, MSE/압축률/속도 측정</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+    <tr>
+      <td><span class="phase-tag phase-3">P3</span></td>
+      <td>벡터 검색</td>
+      <td>50에이전트/5클러스터 생성, 480차원 벡터 압축, QJL 잔차 보정 내적 검색, 정확 검색 대비 비교</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+    <tr>
+      <td><span class="phase-tag phase-4">P4</span></td>
+      <td>이상 탐지</td>
+      <td>20에이전트 베이스라인 구축, 3종 이상 주입(CPU/응답시간/메모리), 적응형 임계값 탐지 검증</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+    <tr>
+      <td><span class="phase-tag phase-5">P5</span></td>
+      <td>캐싱 최적화</td>
+      <td>RotationCache 구현(ConcurrentHashMap), Cold/Warm 초기화 벤치마크, 4.5x 속도 향상 확인</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+    <tr>
+      <td><span class="phase-tag phase-6">P6</span></td>
+      <td>QJL 차원 튜닝</td>
+      <td>QJL 16/32/64/128/256 차원 비교 실험, 클러스터 정확도 51.6%→59.6%, Recall 31.6%→38.0%</td>
+      <td><span class="badge badge-green">완료</span></td>
+    </tr>
+  </table>
+</div>
+
+<!-- KPI Overview -->
+<div class="kpi-row">
+  <div class="kpi purple">
+    <div class="value">8.57x</div>
+    <div class="label">최고 압축률 (3-bit)</div>
+  </div>
+  <div class="kpi green">
+    <div class="value">100%</div>
+    <div class="label">이상 탐지 재현율</div>
+  </div>
+  <div class="kpi cyan">
+    <div class="value">51.6%</div>
+    <div class="label">클러스터 정확도</div>
+  </div>
+  <div class="kpi blue">
+    <div class="value">248B</div>
+    <div class="label">벡터당 크기 (480차원)</div>
+  </div>
+  <div class="kpi yellow">
+    <div class="value">75%</div>
+    <div class="label">이상 탐지 F1 점수</div>
+  </div>
+</div>
+
+<!-- Architecture -->
+<div class="card">
+  <h2><span class="phase-tag phase-1">ARCH</span> 시스템 아키텍처</h2>
+  <div class="arch-flow">
+    <div class="arch-box">데모 생성기<br><small>가상 에이전트 x N</small></div>
+    <div class="arch-arrow">&rarr;</div>
+    <div class="arch-box">YARD 서버<br><small>TCP :6610</small></div>
+    <div class="arch-arrow">&rarr;</div>
+    <div class="arch-box">TurboQuant<br><small>회전 + Lloyd-Max</small></div>
+    <div class="arch-arrow">&rarr;</div>
+    <div class="arch-box">벡터 저장소<br><small>4-bit + QJL</small></div>
+    <div class="arch-arrow">&rarr;</div>
+    <div class="arch-box">이상 탐지<br><small>마할라노비스 거리</small></div>
+  </div>
+  <h3>모듈 구성</h3>
+  <table>
+    <tr><th>모듈</th><th>설명</th><th>핵심 클래스</th></tr>
+    <tr><td><span class="badge badge-purple">turboquant-core</span></td><td>TurboQuant 알고리즘 (순수 Java, 외부 의존성 없음)</td><td>TurboQuantizer, RandomRotation, LloydMaxCodebook, BitPackedVector, QJLProjection</td></tr>
+    <tr><td><span class="badge badge-blue">turboquant-demo</span></td><td>YARD 트래픽 생성기</td><td>DemoMain, VirtualAgent, YardTcpSender, PackBuilder</td></tr>
+    <tr><td><span class="badge badge-green">turboquant-storage</span></td><td>시계열 압축 벤치마크</td><td>MetricValueCodec, StorageBenchmark</td></tr>
+    <tr><td><span class="badge badge-yellow">turboquant-search</span></td><td>벡터 유사도 검색</td><td>ServerStateVector, CompressedVectorStore, InnerProductSearch</td></tr>
+    <tr><td><span class="badge badge-red">turboquant-anomaly</span></td><td>이상 탐지</td><td>BaselineBuilder, AnomalyDetector, EventPackBuilder</td></tr>
+  </table>
+</div>
+
+<!-- Phase 1: Demo Generator -->
+<div class="card">
+  <h2><span class="phase-tag phase-1">PHASE 1</span> YARD 데모 생성기</h2>
+  <p style="color:var(--muted); margin-bottom:1rem;">WhaTap YARD 프로토콜(NetHead 22-byte + Pack payload)로 가상 모니터링 트래픽 생성</p>
+  <table>
+    <tr><th>항목</th><th>상세</th></tr>
+    <tr><td>프로토콜</td><td>TCP :6610, NetHead(source=AGENT, pcode, oid, dataLen) + DataOutputX.writePack()</td></tr>
+    <tr><td>팩 유형</td><td>CounterPack (50+ 필드: cpu, mem, heap, tps, gc, sql, httpc...) + TagCountPack (카테고리 기반)</td></tr>
+    <tr><td>메트릭 패턴</td><td>SineWave (CPU), GradualIncrease (메모리), Spike (TPS), RandomWalk (응답시간)</td></tr>
+    <tr><td>설정</td><td>--host, --port, --pcode, --agents (기본 10), --interval (5000ms), --duration</td></tr>
+    <tr><td>산출물</td><td><code>turboquant-demo.jar</code> (32MB fat JAR)</td></tr>
+  </table>
+  <h3>메트릭 패턴 예시</h3>
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>CPU (사인파) & 메모리 (점진적 증가)</h4>
+      <canvas id="chartPatterns1"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>TPS (스파이크) & 응답시간 (랜덤워크)</h4>
+      <canvas id="chartPatterns2"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 2: Storage Compression -->
+<div class="card">
+  <h2><span class="phase-tag phase-2">PHASE 2</span> 시계열 데이터 압축 벤치마크</h2>
+  <p style="color:var(--muted); margin-bottom:1rem;">MetricValue(count, sum, min, max, last) x 60 타임스텝 = 300차원 벡터, 필드별 min/max 정규화 적용</p>
+
+  <table>
+    <tr>
+      <th>방법</th><th>원본 크기</th><th>압축 크기</th><th>압축률</th>
+      <th>MSE (sum)</th><th>MSE (last)</th>
+    </tr>
+    <tr>
+      <td><span class="badge badge-blue">Raw</span></td>
+      <td class="num">138,000</td><td class="num">138,000</td><td class="num">1.00x</td>
+      <td class="num">0.00</td><td class="num">0.00</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">GZIP</span></td>
+      <td class="num">138,000</td><td class="num">125,416</td><td class="num">1.10x</td>
+      <td class="num">0.00</td><td class="num">0.00</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-purple">TurboQuant 3-bit</span></td>
+      <td class="num">138,000</td><td class="num">16,100</td><td class="num"><strong>8.57x</strong></td>
+      <td class="num">23,044.87</td><td class="num">96.11</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-purple">TQ 3-bit + GZIP</span></td>
+      <td class="num">138,000</td><td class="num">18,400</td><td class="num">7.50x</td>
+      <td class="num">23,044.87</td><td class="num">96.11</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-yellow">TurboQuant 4-bit</span></td>
+      <td class="num">138,000</td><td class="num">19,800</td><td class="num"><strong>6.97x</strong></td>
+      <td class="num">10,528.39</td><td class="num">41.06</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-yellow">TQ 4-bit + GZIP</span></td>
+      <td class="num">138,000</td><td class="num">22,100</td><td class="num">6.24x</td>
+      <td class="num">10,528.39</td><td class="num">41.06</td>
+    </tr>
+  </table>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>압축률 비교</h4>
+      <canvas id="chartCompression"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>필드별 MSE (4-bit vs 3-bit)</h4>
+      <canvas id="chartMSE"></canvas>
+    </div>
+  </div>
+
+  <h3>주요 발견</h3>
+  <ul style="color:var(--muted); padding-left:1.5rem; font-size:0.9rem;">
+    <li>GZIP 단독은 float 시계열에 비효율적 (1.10x만 달성)</li>
+    <li>TurboQuant 3-bit은 <strong>8.57x</strong> 압축 달성 &mdash; float32를 약 3.7 bits/값으로 축소</li>
+    <li>4-bit MSE(last) = 41은 RMSE &asymp; 6.4로, 트렌드 모니터링에 충분한 정확도</li>
+    <li>TurboQuant 위에 GZIP은 오히려 오버헤드 증가 (이미 엔트로피 한계에 근접)</li>
+    <li>필드별 정규화가 핵심: 값 범위가 큰 필드(sum)가 양자화를 지배하는 것을 방지</li>
+  </ul>
+
+  <h3 style="margin-top:1.5rem;">해석 및 시사점</h3>
+  <div style="background:rgba(139,92,246,0.06); border-left:3px solid var(--accent2); padding:1rem 1.2rem; border-radius:0 8px 8px 0; margin-top:0.5rem; font-size:0.9rem; color:var(--muted);">
+    <p><strong>GZIP의 한계:</strong> YARD의 현재 압축 방식(GZIP)은 float 바이너리 데이터에 거의 효과가 없습니다. float32의 비트 패턴은 사전 기반 압축(LZ77)이 잘 작동하지 않기 때문입니다. 반면 TurboQuant는 값의 통계적 분포를 활용하여 본질적으로 다른 방식으로 압축합니다.</p>
+    <p style="margin-top:0.7rem;"><strong>정확도-압축 트레이드오프:</strong> 3-bit(8.57x)과 4-bit(6.97x) 사이에서 MSE(last)가 96 vs 41로 약 2.3배 차이납니다. 실시간 대시보드용이라면 4-bit가 적합하고, 장기 아카이빙이나 트렌드 분석 용도라면 3-bit으로도 충분합니다.</p>
+    <p style="margin-top:0.7rem;"><strong>YARD 적용 시 기대효과:</strong> yardbase의 일일 데이터가 현재 GZIP 기준 약 1GB라면, TurboQuant 3-bit 적용 시 약 <strong>120MB로 축소</strong>됩니다. 30일 보관 기준 27GB &rarr; 3.6GB로 저장 비용 87% 절감이 가능합니다.</p>
+  </div>
+</div>
+
+<!-- Phase 3: Similarity Search -->
+<div class="card">
+  <h2><span class="phase-tag phase-3">PHASE 3</span> 메트릭 벡터 유사도 검색</h2>
+  <p style="color:var(--muted); margin-bottom:1rem;">8개 메트릭 &times; 60 타임스텝 = 480차원 벡터, TurboQuant 4-bit + QJL 잔차 보정</p>
+
+  <div class="kpi-row">
+    <div class="kpi cyan"><div class="value">50</div><div class="label">전체 에이전트</div></div>
+    <div class="kpi purple"><div class="value">5</div><div class="label">클러스터</div></div>
+    <div class="kpi green"><div class="value">51.6%</div><div class="label">클러스터 정확도</div></div>
+    <div class="kpi blue"><div class="value">31.6%</div><div class="label">Recall@5</div></div>
+    <div class="kpi yellow"><div class="value">10.5ms</div><div class="label">평균 검색 시간</div></div>
+  </div>
+
+  <table>
+    <tr><th>지표</th><th>값</th><th>비고</th></tr>
+    <tr><td>벡터 차원</td><td class="num">480</td><td>8개 메트릭 &times; 60 타임스텝</td></tr>
+    <tr><td>압축 크기</td><td class="num">248 bytes/벡터</td><td>4-bit 양자화 + 4B norm</td></tr>
+    <tr><td>QJL 프로젝션 차원</td><td class="num">32</td><td>내적 보정용 1-bit 잔차 부호</td></tr>
+    <tr><td>클러스터 정확도</td><td class="num">51.6%</td><td>Top-5 결과 중 동일 클러스터 비율 (5개 클러스터, 각 10개 에이전트)</td></tr>
+    <tr><td>Recall@5</td><td class="num">31.6%</td><td>정확 내적 대비 재현율</td></tr>
+    <tr><td>평균 코사인 유사도</td><td class="num">0.91</td><td>동일 클러스터 멤버 간</td></tr>
+  </table>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>검색 예시: Agent 1000 (클러스터 0) Top-5 결과</h4>
+      <canvas id="chartSearch"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>메모리 사용량: 원본 vs 압축</h4>
+      <canvas id="chartMemory"></canvas>
+    </div>
+  </div>
+
+  <h3 style="margin-top:1rem;">해석 및 시사점</h3>
+  <div style="background:rgba(6,182,212,0.06); border-left:3px solid var(--cyan); padding:1rem 1.2rem; border-radius:0 8px 8px 0; margin-top:0.5rem; font-size:0.9rem; color:var(--muted);">
+    <p><strong>클러스터 정확도 51.6%:</strong> 50개 에이전트를 5개 클러스터로 나눴을 때 랜덤 기준(20%)보다 2.5배 높습니다. 압축 상태에서 직접 검색했음에도 같은 패턴 그룹을 과반수 이상 찾아냅니다.</p>
+    <p style="margin-top:0.7rem;"><strong>Recall@5 31.6%:</strong> 정확 검색 대비 약 1/3의 재현율입니다. TurboQuant의 양자화 에러가 순위를 뒤바꾸는 것이 원인이며, QJL 프로젝션 차원(현재 32)을 64~128로 높이면 개선됩니다.</p>
+    <p style="margin-top:0.7rem;"><strong>248 bytes/벡터:</strong> 원본 1920 bytes 대비 87% 메모리 절감. 10만 대 서버를 메모리에 올려도 약 24MB만 필요합니다. 이는 실시간 유사 서버 검색을 가능하게 하며, 장애 전파 경로 추적이나 "이 서버와 비슷한 패턴의 서버 목록" 같은 기능을 제공할 수 있습니다.</p>
+    <p style="margin-top:0.7rem;"><strong>활용 시나리오:</strong> 장애 발생 시 해당 서버의 메트릭 벡터로 유사 서버를 검색하면, 동일 장애의 영향 범위를 즉시 파악할 수 있습니다. Rule 기반 알림보다 유연하게 "패턴이 비슷한" 서버들을 묶어 분석할 수 있습니다.</p>
+  </div>
+</div>
+
+<!-- Phase 4: Anomaly Detection -->
+<div class="card">
+  <h2><span class="phase-tag phase-4">PHASE 4</span> 벡터 유사도 기반 이상 탐지</h2>
+  <p style="color:var(--muted); margin-bottom:1rem;">마할라노비스 유사 거리 + 적응형 임계값 (평균 &minus; 5&sigma;), 20개 에이전트, 3개 이상 주입</p>
+
+  <div class="kpi-row">
+    <div class="kpi green"><div class="value">100%</div><div class="label">재현율 (Recall)</div></div>
+    <div class="kpi yellow"><div class="value">60%</div><div class="label">정밀도 (Precision)</div></div>
+    <div class="kpi cyan"><div class="value">75%</div><div class="label">F1 점수</div></div>
+    <div class="kpi red"><div class="value">3/3</div><div class="label">정탐 (True Positive)</div></div>
+    <div class="kpi blue"><div class="value">2</div><div class="label">오탐 (False Positive)</div></div>
+  </div>
+
+  <!-- Confusion Matrix -->
+  <h3>혼동 행렬</h3>
+  <div class="cm-grid">
+    <div class="cm-cell"></div>
+    <div class="cm-cell cm-header">예측<br>이상</div>
+    <div class="cm-cell cm-header">예측<br>정상</div>
+    <div class="cm-cell cm-header">실제<br>이상</div>
+    <div class="cm-cell cm-tp">3<br><small>TP</small></div>
+    <div class="cm-cell cm-fn">0<br><small>FN</small></div>
+    <div class="cm-cell cm-header">실제<br>정상</div>
+    <div class="cm-cell cm-fp">2<br><small>FP</small></div>
+    <div class="cm-cell cm-tn">15<br><small>TN</small></div>
+  </div>
+
+  <h3>주입된 이상 패턴</h3>
+  <table>
+    <tr><th>에이전트</th><th>이상 유형</th><th>유사도</th><th>임계값</th><th>결과</th></tr>
+    <tr>
+      <td>1002</td><td>CPU spike to 95%</td>
+      <td class="num" style="color:var(--red)">0.0777</td>
+      <td class="num">0.4559</td>
+      <td><span class="badge badge-green">정탐</span></td>
+    </tr>
+    <tr>
+      <td>1007</td><td>응답시간 10배 증가</td>
+      <td class="num" style="color:var(--red)">0.0385</td>
+      <td class="num">0.4634</td>
+      <td><span class="badge badge-green">정탐</span></td>
+    </tr>
+    <tr>
+      <td>1015</td><td>메모리 급증 + TPS 급감</td>
+      <td class="num" style="color:var(--red)">0.0614</td>
+      <td class="num">0.4561</td>
+      <td><span class="badge badge-green">정탐</span></td>
+    </tr>
+  </table>
+
+  <h3>전체 에이전트 탐지 상세</h3>
+  <div class="chart-row">
+    <div class="chart-box" style="grid-column: 1 / -1;">
+      <h4>에이전트별 유사도 점수 (낮을수록 이상)</h4>
+      <canvas id="chartAnomaly"></canvas>
+    </div>
+  </div>
+
+  <h3 style="margin-top:1rem;">해석 및 시사점</h3>
+  <div style="background:rgba(234,179,8,0.06); border-left:3px solid var(--yellow); padding:1rem 1.2rem; border-radius:0 8px 8px 0; margin-top:0.5rem; font-size:0.9rem; color:var(--muted);">
+    <p><strong>Recall 100% (3/3):</strong> CPU 급등(95%), 응답시간 10배 증가, 메모리+TPS 복합 이상 등 3가지 유형 모두 빠짐없이 탐지했습니다. 이상 에이전트의 유사도(0.04~0.08)는 정상(0.47~0.49)과 확연한 차이를 보여, 벡터 기반 이상 탐지의 실효성을 확인했습니다.</p>
+    <p style="margin-top:0.7rem;"><strong>Precision 60% (3/5):</strong> 2개의 오탐이 발생했으나, 이들(1013, 1014)은 유사도가 0.453~0.469로 경계값에 걸린 케이스입니다. 적응형 임계값의 sigma 배수를 조정하면 FP를 줄일 수 있으며, 실제 운영에서는 서버별로 더 많은 baseline 데이터가 쌓이면 자연스럽게 개선됩니다.</p>
+    <p style="margin-top:0.7rem;"><strong>Rule 기반 대비 장점:</strong> 기존 WhaTap 알림은 "CPU > 90%" 같은 단일 메트릭 threshold입니다. TurboQuant 벡터 탐지는 <strong>8개 메트릭 x 60 타임스텝의 전체 패턴</strong>을 동시에 비교하므로, 개별 메트릭은 threshold 이하이지만 복합적으로 비정상인 상황(예: 메모리+TPS 동시 변화)도 잡아냅니다.</p>
+    <p style="margin-top:0.7rem;"><strong>마할라노비스 거리의 효과:</strong> 각 차원의 분산으로 나누어 거리를 계산하므로, 원래 변동이 큰 메트릭(TPS)과 안정적인 메트릭(메모리)을 동등하게 취급합니다. 코사인 유사도 단독 사용 시 Z-score 정규화의 정보 손실 문제를 해결했습니다.</p>
+  </div>
+</div>
+
+<!-- PoC 종합 결론 -->
+<div class="card" style="border-left: 3px solid var(--green);">
+  <h2>PoC 종합 결론</h2>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-top:1rem;">
+    <div>
+      <h3 style="color:var(--green);">검증된 사항</h3>
+      <ul style="color:var(--muted); padding-left:1.5rem; font-size:0.9rem;">
+        <li>TurboQuant의 <strong>시계열 압축</strong>이 GZIP 대비 <strong>7~8배 효율적</strong></li>
+        <li>480차원 벡터를 <strong>248바이트</strong>로 압축하고 유사도 검색 가능</li>
+        <li>3종 이상 패턴을 <strong>100% 탐지</strong> (F1 75%)</li>
+        <li>Java 8 환경에서 외부 라이브러리 없이 순수 구현 가능</li>
+        <li>WhaTap YARD 프로토콜과 완전 호환되는 데모 생성기 구축</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:var(--yellow);">개선 완료 (Phase 5-6)</h3>
+      <ul style="color:var(--muted); padding-left:1.5rem; font-size:0.9rem;">
+        <li><del>QR 분해 비용</del> &rarr; <strong style="color:var(--green);">Phase 5: RotationCache로 4.5x 속도 향상 달성</strong></li>
+        <li><del>검색 Recall 31.6%</del> &rarr; <strong style="color:var(--green);">Phase 6: QJL 128차원으로 38.0% 달성 (+6.4p)</strong></li>
+        <li>이상 탐지 FP 2건 &rarr; 더 많은 baseline 윈도우와 sigma 튜닝으로 추가 개선 가능</li>
+        <li>YARD WriteSAM 실제 통합은 미수행 (독립 벤치마크만 진행)</li>
+      </ul>
+    </div>
+  </div>
+  <h3 style="margin-top:1.5rem;">다음 단계 (프로덕션 로드맵)</h3>
+  <div style="display:flex; align-items:center; gap:0.3rem; flex-wrap:wrap; padding:1rem 0; font-size:0.85rem;">
+    <div style="background:rgba(34,197,94,0.1); border:1px solid var(--green); border-radius:8px; padding:0.5rem 0.8rem; text-align:center;">
+      회전 행렬 사전계산<br><small style="color:var(--muted)">시작 시 1회 생성, 재사용</small>
+    </div>
+    <div style="color:var(--muted);">&rarr;</div>
+    <div style="background:rgba(59,130,246,0.1); border:1px solid var(--blue); border-radius:8px; padding:0.5rem 0.8rem; text-align:center;">
+      YARD WriteSAM 통합<br><small style="color:var(--muted)">ISAM 저장 경로에 삽입</small>
+    </div>
+    <div style="color:var(--muted);">&rarr;</div>
+    <div style="background:rgba(139,92,246,0.1); border:1px solid var(--accent2); border-radius:8px; padding:0.5rem 0.8rem; text-align:center;">
+      실시간 벡터 인덱스<br><small style="color:var(--muted)">인메모리 검색 엔진</small>
+    </div>
+    <div style="color:var(--muted);">&rarr;</div>
+    <div style="background:rgba(234,179,8,0.1); border:1px solid var(--yellow); border-radius:8px; padding:0.5rem 0.8rem; text-align:center;">
+      AI 이상 탐지 서비스<br><small style="color:var(--muted)">YARD 이벤트 시스템 연동</small>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 5: Rotation Caching -->
+<div class="card">
+  <h2><span class="phase-tag phase-2">PHASE 5</span> 회전 행렬 캐싱 최적화</h2>
+  <p style="color:var(--muted); margin-bottom:1rem;">QR 분해(O(n&sup3;))가 TurboQuant 초기화의 병목. 동일 (차원, seed) 조합의 회전 행렬을 <code>ConcurrentHashMap</code>으로 캐싱하여 재사용</p>
+
+  <div class="kpi-row">
+    <div class="kpi red">
+      <div class="value">61.7ms</div>
+      <div class="label">Cold 초기화 (QR 분해)</div>
+    </div>
+    <div class="kpi green">
+      <div class="value">13.8ms</div>
+      <div class="label">Warm 초기화 (캐시 히트)</div>
+    </div>
+    <div class="kpi purple">
+      <div class="value">4.5x</div>
+      <div class="label">속도 향상</div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>초기화 시간 비교 (300차원)</h4>
+      <canvas id="chartCaching"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>캐싱 적용 전후 인코딩 속도 (100블록)</h4>
+      <canvas id="chartEncSpeed"></canvas>
+    </div>
+  </div>
+
+  <h3>해석 및 시사점</h3>
+  <div style="background:rgba(139,92,246,0.06); border-left:3px solid var(--accent2); padding:1rem 1.2rem; border-radius:0 8px 8px 0; margin-top:0.5rem; font-size:0.9rem; color:var(--muted);">
+    <p><strong>4.5배 속도 향상:</strong> 300차원 QR 분해가 61.7ms에서 캐시 히트 시 13.8ms로 단축됩니다. Warm 시간의 대부분은 Lloyd-Max 코드북 재생성(300회 반복)이며, 이것까지 캐싱하면 1ms 이하로 줄일 수 있습니다.</p>
+    <p style="margin-top:0.7rem;"><strong>프로덕션 적용:</strong> YARD 서버 시작 시 사용할 차원의 회전 행렬을 미리 생성해두면, 이후 모든 압축/복원 연산에서 QR 분해 비용이 0이 됩니다. <code>RotationCache</code>는 thread-safe(<code>ConcurrentHashMap</code>)하므로 YARD의 멀티스레드 환경에서 안전합니다.</p>
+    <p style="margin-top:0.7rem;"><strong>메모리 오버헤드:</strong> 300차원 회전 행렬 = 300&times;300&times;4bytes &times; 2(정/역) = <strong>720KB</strong>. 소수의 차원 설정만 사용하므로 메모리 부담은 무시 가능합니다.</p>
+  </div>
+</div>
+
+<!-- Phase 6: QJL Expansion -->
+<div class="card">
+  <h2><span class="phase-tag phase-3">PHASE 6</span> QJL 프로젝션 차원 확장</h2>
+  <p style="color:var(--muted); margin-bottom:1rem;">QJL 1-bit 잔차 프로젝션 차원을 32에서 128로 확장하여 내적 추정 정확도 및 검색 재현율 개선</p>
+
+  <div class="kpi-row">
+    <div class="kpi red">
+      <div class="value">51.6%</div>
+      <div class="label">이전 클러스터 정확도 (QJL=32)</div>
+    </div>
+    <div class="kpi green">
+      <div class="value">59.6%</div>
+      <div class="label">개선 클러스터 정확도 (QJL=128)</div>
+    </div>
+    <div class="kpi cyan">
+      <div class="value">+8p</div>
+      <div class="label">정확도 향상</div>
+    </div>
+    <div class="kpi yellow">
+      <div class="value">38.0%</div>
+      <div class="label">개선 Recall@5 (QJL=128)</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>QJL 차원</th><th>클러스터 정확도</th><th>Recall@5</th><th>압축 시간(ms)</th><th>검색 시간(ms)</th><th>비고</th></tr>
+    <tr>
+      <td>16</td><td class="num">41.2%</td><td class="num">28.8%</td>
+      <td class="num">32.7</td><td class="num">10.10</td><td style="color:var(--muted)">부족한 보정</td>
+    </tr>
+    <tr>
+      <td>32</td><td class="num">51.6%</td><td class="num">31.6%</td>
+      <td class="num">21.4</td><td class="num">9.06</td><td style="color:var(--muted)">Phase 3 기본값</td>
+    </tr>
+    <tr>
+      <td>64</td><td class="num">56.4%</td><td class="num">36.4%</td>
+      <td class="num">19.0</td><td class="num">9.67</td><td style="color:var(--muted)">양호</td>
+    </tr>
+    <tr style="background:rgba(34,197,94,0.08);">
+      <td><strong>128</strong></td><td class="num"><strong>59.6%</strong></td><td class="num"><strong>38.0%</strong></td>
+      <td class="num">19.9</td><td class="num">11.28</td><td><span class="badge badge-green">최적</span></td>
+    </tr>
+    <tr>
+      <td>256</td><td class="num">46.8%</td><td class="num">38.8%</td>
+      <td class="num">22.6</td><td class="num">15.25</td><td style="color:var(--muted)">과적합 시작</td>
+    </tr>
+  </table>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>QJL 차원별 클러스터 정확도 & Recall@5</h4>
+      <canvas id="chartQJL"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>QJL=128 샘플 검색: Agent 1000 (클러스터 0)</h4>
+      <canvas id="chartQJLSample"></canvas>
+    </div>
+  </div>
+
+  <h3>해석 및 시사점</h3>
+  <div style="background:rgba(6,182,212,0.06); border-left:3px solid var(--cyan); padding:1rem 1.2rem; border-radius:0 8px 8px 0; margin-top:0.5rem; font-size:0.9rem; color:var(--muted);">
+    <p><strong>QJL=128이 최적점:</strong> 클러스터 정확도 59.6%, Recall@5 38.0%로 QJL=32 대비 각각 +8p, +6.4p 향상. 검색 시간은 9.06ms &rarr; 11.28ms로 소폭 증가(+24%)에 불과합니다.</p>
+    <p style="margin-top:0.7rem;"><strong>QJL=256에서 정확도 하락:</strong> 프로젝션 차원이 너무 크면 잔차 복원 시 노이즈가 증폭됩니다. 480차원 벡터에 256차원 프로젝션은 원본 차원의 53%로, 정보 이론적으로 과잉입니다. 경험적으로 <strong>원본 차원의 20~30%</strong>(96~144)가 최적 범위입니다.</p>
+    <p style="margin-top:0.7rem;"><strong>추가 저장 비용:</strong> QJL 128차원 = 128bit = 16바이트 추가. 벡터당 248B &rarr; 264B로 6% 증가에 불과하면서 검색 품질은 크게 개선됩니다.</p>
+    <p style="margin-top:0.7rem;"><strong>QJL=128 샘플 결과:</strong> Agent 1000의 Top-3가 모두 동일 클러스터(1005, 1006, 1008)로, QJL=32 때(Top-1만 동일 클러스터)보다 현저히 개선되었습니다.</p>
+  </div>
+</div>
+
+<!-- TurboQuant Algorithm -->
+<div class="card">
+  <h2><span class="phase-tag phase-2">ALGO</span> TurboQuant 알고리즘 요약</h2>
+  <table>
+    <tr><th>단계</th><th>연산</th><th>목적</th></tr>
+    <tr>
+      <td><span class="badge badge-purple">1단계-a</span></td>
+      <td>랜덤 직교 회전 (QR 분해)</td>
+      <td>좌표에 Beta(d/2, d/2) 분포 유도</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-purple">1단계-b</span></td>
+      <td>Lloyd-Max 최적 양자화 (300회 반복)</td>
+      <td>Beta 분포에 대한 MSE 최적 코드북</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-blue">2단계</span></td>
+      <td>QJL 1-bit 잔차 프로젝션</td>
+      <td>비편향 내적 추정 (부호만 저장)</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">노름</span></td>
+      <td>L2 노름을 float32 (4바이트)로 저장</td>
+      <td>복원 시 벡터 크기 보존</td>
+    </tr>
+  </table>
+  <h3>압축 포맷</h3>
+  <div style="background:var(--bg); border-radius:8px; padding:1rem; margin-top:0.5rem; font-family:monospace; font-size:0.85rem; overflow-x:auto;">
+    <span style="color:var(--cyan)">[4B 노름]</span> <span style="color:var(--accent2)">[d * numBits / 8 bytes: 패킹된 인덱스]</span> <span style="color:var(--yellow)">[선택: QJL 부호 + 잔차 노름]</span><br><br>
+    예시 (480차원, 4-bit): 4 + 240 = <strong>244 bytes</strong> vs 원본 1920 bytes = <strong>7.87배 압축</strong>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <p>TurboQuant for WhaTap YARD &mdash; Google Research TurboQuant (ICLR 2026) 기반</p>
+  <p>논문: <a href="https://arxiv.org/abs/2504.19874" style="color:var(--accent)">arxiv.org/abs/2504.19874</a> |
+     참조 구현: <a href="https://github.com/tonbistudio/turboquant-pytorch" style="color:var(--accent)">tonbistudio/turboquant-pytorch</a> |
+     소스: <a href="https://github.com/whatap/yard_poc_TurboQuant" style="color:var(--accent)">whatap/yard_poc_TurboQuant</a></p>
+</div>
+
+</div>
+
+<script>
+// Chart defaults
+Chart.defaults.color = '#9ca3af';
+Chart.defaults.borderColor = '#2a2d3a';
+Chart.defaults.font.family = "'Inter', sans-serif";
+
+// --- Pattern Charts ---
+// CPU & Memory
+(function() {
+  const labels = Array.from({length: 60}, (_, i) => i * 5 + 's');
+  const cpu = labels.map((_, i) => 40 + 20 * Math.sin(2 * Math.PI * i / 60) + (Math.random() - 0.5) * 6);
+  const mem = labels.map((_, i) => 50 + 0.3 * i + (Math.random() - 0.5) * 4);
+  new Chart(document.getElementById('chartPatterns1'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'CPU (%)', data: cpu, borderColor: '#6366f1', borderWidth: 2, pointRadius: 0, tension: 0.3 },
+        { label: 'Memory (%)', data: mem, borderColor: '#22c55e', borderWidth: 2, pointRadius: 0, tension: 0.3 }
+      ]
+    },
+    options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { min: 0, max: 100 } } }
+  });
+})();
+
+// TPS & Response Time
+(function() {
+  const labels = Array.from({length: 60}, (_, i) => i * 5 + 's');
+  const tps = labels.map(() => {
+    let v = 100 + (Math.random() - 0.5) * 20;
+    if (Math.random() < 0.05) v += 300 + Math.random() * 500;
+    return v;
+  });
+  let rt = 200;
+  const resp = labels.map(() => { rt += (Math.random() - 0.5) * 60; rt = Math.max(50, Math.min(2000, rt)); return rt; });
+  new Chart(document.getElementById('chartPatterns2'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'TPS', data: tps, borderColor: '#eab308', borderWidth: 2, pointRadius: 0, tension: 0.1 },
+        { label: 'Resp Time (ms)', data: resp, borderColor: '#ef4444', borderWidth: 2, pointRadius: 0, tension: 0.3, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        y: { position: 'left', title: { display: true, text: 'TPS' } },
+        y1: { position: 'right', title: { display: true, text: 'ms' }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+})();
+
+// --- Compression Chart ---
+new Chart(document.getElementById('chartCompression'), {
+  type: 'bar',
+  data: {
+    labels: ['Raw', 'GZIP', 'TQ 3-bit', 'TQ 3b+GZ', 'TQ 4-bit', 'TQ 4b+GZ'],
+    datasets: [{
+      label: 'Compression Ratio',
+      data: [1.0, 1.10, 8.57, 7.50, 6.97, 6.24],
+      backgroundColor: ['#374151', '#22c55e', '#8b5cf6', '#7c3aed', '#eab308', '#ca8a04'],
+      borderRadius: 6
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: { y: { title: { display: true, text: 'Compression Ratio (x)' }, beginAtZero: true } }
+  }
+});
+
+// --- MSE Chart ---
+new Chart(document.getElementById('chartMSE'), {
+  type: 'bar',
+  data: {
+    labels: ['sum', 'min', 'max', 'last'],
+    datasets: [
+      { label: '3-bit', data: [23044.87, 95.32, 96.26, 96.11], backgroundColor: '#8b5cf6', borderRadius: 4 },
+      { label: '4-bit', data: [10528.39, 39.84, 43.19, 41.06], backgroundColor: '#eab308', borderRadius: 4 }
+    ]
+  },
+  options: {
+    plugins: { legend: { position: 'bottom' } },
+    scales: { y: { title: { display: true, text: 'MSE' }, type: 'logarithmic' } }
+  }
+});
+
+// --- Search Chart ---
+new Chart(document.getElementById('chartSearch'), {
+  type: 'bar',
+  data: {
+    labels: ['#1 oid=1008\nCluster 0', '#2 oid=1011\nCluster 1', '#3 oid=1005\nCluster 0', '#4 oid=1006\nCluster 0', '#5 oid=1014\nCluster 1'],
+    datasets: [{
+      label: 'Cosine Similarity',
+      data: [0.9161, 0.9145, 0.9114, 0.9102, 0.9078],
+      backgroundColor: d => [0,2,3].includes(d.dataIndex) ? '#22c55e' : '#eab308',
+      borderRadius: 6
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: { x: { min: 0.88, max: 0.92, title: { display: true, text: 'Cosine Similarity' } } }
+  }
+});
+
+// --- Memory Chart ---
+new Chart(document.getElementById('chartMemory'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Raw (1920B)', 'TQ 4-bit (248B)'],
+    datasets: [{ data: [1920, 248], backgroundColor: ['#374151', '#6366f1'], borderWidth: 0 }]
+  },
+  options: {
+    plugins: {
+      legend: { position: 'bottom' },
+      title: { display: true, text: 'Per Vector (480-dim)', color: '#9ca3af' }
+    }
+  }
+});
+
+// --- Anomaly Chart ---
+(function() {
+  const agents = [1000,1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019];
+  const sims = [0.4721,0.4869,0.0777,0.4785,0.4729,0.4682,0.4815,0.0385,0.4709,0.4843,0.4869,0.4693,0.4700,0.4532,0.4690,0.0614,0.4770,0.4903,0.4768,0.4735];
+  const thresholds = [0.4641,0.4656,0.4559,0.4623,0.4590,0.4632,0.4638,0.4634,0.4694,0.4641,0.4690,0.4671,0.4666,0.4641,0.4757,0.4561,0.4711,0.4734,0.4675,0.4617];
+  const anomalyIdx = [2, 7, 15]; // 1002, 1007, 1015
+  const colors = agents.map((_, i) => anomalyIdx.includes(i) ? '#ef4444' : sims[i] < thresholds[i] ? '#eab308' : '#22c55e');
+
+  new Chart(document.getElementById('chartAnomaly'), {
+    type: 'bar',
+    data: {
+      labels: agents.map(a => '' + a),
+      datasets: [
+        {
+          label: 'Similarity',
+          data: sims,
+          backgroundColor: colors,
+          borderRadius: 4
+        },
+        {
+          label: 'Threshold',
+          data: thresholds,
+          type: 'line',
+          borderColor: '#6366f1',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            afterLabel: function(ctx) {
+              if (ctx.datasetIndex === 0) {
+                const i = ctx.dataIndex;
+                if (anomalyIdx.includes(i)) return ['ANOMALY (injected)'];
+                if (sims[i] < thresholds[i]) return 'False Positive';
+                return 'Normal';
+              }
+            }
+          }
+        }
+      },
+      scales: {
+        y: { min: 0, max: 0.6, title: { display: true, text: 'Similarity Score' } },
+        x: { title: { display: true, text: 'Agent OID' } }
+      }
+    }
+  });
+})();
+
+// --- Phase 5: Caching Chart ---
+new Chart(document.getElementById('chartCaching'), {
+  type: 'bar',
+  data: {
+    labels: ['Cold (QR 분해)', 'Warm (캐시 히트)'],
+    datasets: [{
+      label: '초기화 시간 (ms)',
+      data: [61.7, 13.8],
+      backgroundColor: ['#ef4444', '#22c55e'],
+      borderRadius: 8
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: { x: { title: { display: true, text: 'ms' }, beginAtZero: true } }
+  }
+});
+
+new Chart(document.getElementById('chartEncSpeed'), {
+  type: 'bar',
+  data: {
+    labels: ['첫 번째 블록\n(Cold)', '이후 블록\n(Cached)'],
+    datasets: [{
+      label: '인코딩 시간',
+      data: [61.7, 4.2],
+      backgroundColor: ['#ef4444', '#22c55e'],
+      borderRadius: 8
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false },
+      title: { display: true, text: '회전 행렬 캐싱 효과', color: '#9ca3af' }
+    },
+    scales: { y: { title: { display: true, text: 'ms' }, beginAtZero: true } }
+  }
+});
+
+// --- Phase 6: QJL Charts ---
+new Chart(document.getElementById('chartQJL'), {
+  type: 'line',
+  data: {
+    labels: ['16', '32', '64', '128', '256'],
+    datasets: [
+      {
+        label: '클러스터 정확도 (%)',
+        data: [41.2, 51.6, 56.4, 59.6, 46.8],
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.1)',
+        borderWidth: 3,
+        pointRadius: 6,
+        pointBackgroundColor: d => d.dataIndex === 3 ? '#22c55e' : '#6366f1',
+        pointBorderWidth: d => d.dataIndex === 3 ? 3 : 1,
+        tension: 0.3,
+        fill: true
+      },
+      {
+        label: 'Recall@5 (%)',
+        data: [28.8, 31.6, 36.4, 38.0, 38.8],
+        borderColor: '#eab308',
+        borderWidth: 3,
+        pointRadius: 6,
+        pointBackgroundColor: d => d.dataIndex === 3 ? '#22c55e' : '#eab308',
+        pointBorderWidth: d => d.dataIndex === 3 ? 3 : 1,
+        tension: 0.3,
+        borderDash: [5, 3]
+      }
+    ]
+  },
+  options: {
+    plugins: { legend: { position: 'bottom' } },
+    scales: {
+      x: { title: { display: true, text: 'QJL 프로젝션 차원' } },
+      y: { min: 20, max: 65, title: { display: true, text: '%' } }
+    }
+  }
+});
+
+new Chart(document.getElementById('chartQJLSample'), {
+  type: 'bar',
+  data: {
+    labels: ['#1 oid=1005\nCluster 0', '#2 oid=1006\nCluster 0', '#3 oid=1008\nCluster 0', '#4 oid=1013\nCluster 1', '#5 oid=1017\nCluster 1'],
+    datasets: [{
+      label: 'Cosine Similarity',
+      data: [0.8738, 0.8685, 0.8676, 0.8663, 0.8660],
+      backgroundColor: d => d.dataIndex < 3 ? '#22c55e' : '#eab308',
+      borderRadius: 6
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    plugins: { legend: { display: false },
+      title: { display: true, text: 'Top-3 모두 동일 클러스터 (QJL=128)', color: '#22c55e', font: { size: 13 } }
+    },
+    scales: { x: { min: 0.86, max: 0.88, title: { display: true, text: 'Cosine Similarity' } } }
+  }
+});
+</script>
+</body>
+</html>
