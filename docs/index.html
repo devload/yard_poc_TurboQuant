@@ -825,41 +825,162 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
   이 둘을 <strong>시간으로 연결</strong>하면, 감지부터 원인까지 자동으로 이어진다.
 </div>
 
-<h3>실증: 3가지 장애 시나리오</h3>
+<h3>실증: 시나리오 1 — DB 커넥션 풀 고갈을 추적하는 과정</h3>
 
-<div style="background:#fff;border:2px solid var(--red);border-radius:14px;padding:20px 24px;margin:20px 0;box-shadow:var(--shadow)">
-  <h4 style="margin-top:0;color:var(--red)">시나리오 1: DB 커넥션 풀 고갈</h4>
-  <table>
-    <tr><th>단계</th><th>감지 내용</th><th>데이터 출처</th></tr>
-    <tr><td>증상</td><td>히트맵 분포 이상</td><td>hitmap.tqi</td></tr>
-    <tr><td>영향</td><td>/api/order, /api/payment 응답 급증</td><td>quantile.tqi</td></tr>
-    <tr><td>전파</td><td>서버 3대 sql_time +121%</td><td>counter.tqi</td></tr>
-    <tr><td>원인</td><td>DB 커넥션 풀 96% 포화, 대기 12건</td><td>DB 카운터</td></tr>
-    <tr><td style="color:var(--red)"><strong>★ 근본원인</strong></td><td><strong>SELECT * FROM orders... (200ms→8500ms, 43배, 342건)</strong></td><td>StatGeneral</td></tr>
-  </table>
+<p>실제 장애 상황을 시뮬레이션하고, 분석기가 데이터를 어떻게 따라가는지 단계별로 보자.</p>
+
+<h4>10:00:00 — 장애 시작, 아직 아무도 모른다</h4>
+<p>DB 서버에서 특정 쿼리가 느려지기 시작한다. 이 시점에 히트맵은 아직 정상이다.</p>
+
+<h4>10:00:05 — 1단계: 벡터 인덱스가 이상을 감지한다</h4>
+
+<p><strong>counter.tqi</strong>에 5초마다 서버 상태 벡터가 쌓이고 있다. db-2001의 벡터가 베이스라인과 크게 달라진다.</p>
+
+<pre><code>counter.tqi에서 db-2001의 벡터를 읽는다:
+
+  베이스라인 (평소):  [cpu=25, mem=65, sql_time=50,  resp_time=800,  ...]
+  현재 (10:00:05):  [cpu=28, mem=88, sql_time=130, resp_time=1760, ...]
+                               ↑↑↑        ↑↑↑          ↑↑↑
+                          +23 벗어남   +80 벗어남    +960 벗어남
+
+  → 베이스라인 대비 코사인 유사도: 0.42 (평소 0.95 이상)
+  → 판정: "db-2001 이상!"
+
+  이벤트 생성:
+  { source: COUNTER, time: 10:00:05, id: "db-2001",
+    similarity: 0.42,
+    details: {mem: +45%, sql_time: +80%, act_svc_count: +60%} }</code></pre>
+
+<h4>10:00:10~15 — 웹서버들도 이상해진다</h4>
+
+<pre><code>counter.tqi에서 web-1001, web-1002도 이상 감지:
+
+  web-1001 (10:00:10): sql_time +130%, resp_time +85%, gc_count +40%
+  web-1002 (10:00:15): sql_time +125%, resp_time +90%, gc_count +35%
+
+  → 유사도 0.38, 0.35
+  → 이벤트 2개 추가</code></pre>
+
+<h4>10:00:20 — 히트맵과 URL도 이상해진다</h4>
+
+<pre><code>hitmap.tqi: 히트맵 벡터(int[120])가 평소와 완전히 다르다
+
+  평소 히트맵: [0~1초 구간에 90% 집중]
+    버킷: [0:45, 1:38, 2:28, 3:19, 4:11, 5:8, 6:5, ... 나머지 0]
+
+  현재 히트맵: [3~8초 구간으로 퍼짐]
+    버킷: [0:5, 1:3, 2:4, ... 24:18, 25:22, 26:25, 27:20, ... ]
+
+  → 코사인 유사도: 0.006 (형태가 완전히 다름)
+  → 이벤트 생성: { source: HITMAP, similarity: 0.006 }
+
+quantile.tqi: /api/order의 퍼센타일 분포도 이상
+  평소: [P50=100ms, P90=300ms, P99=800ms]
+  현재: [P50=2500ms, P90=5000ms, P99=12000ms]
+  → 유사도: 0.45</code></pre>
+
+<h4>10:00:20 — 2단계: 시간으로 묶는다</h4>
+
+<pre><code>RootCauseAnalyzer가 ±5분 윈도우로 이벤트를 그룹핑:
+
+  시간순 정렬:
+  [10:00:05] COUNTER db-2001    유사도 0.42  {mem, sql_time, act_svc_count}
+  [10:00:10] COUNTER web-1001   유사도 0.38  {sql_time, resp_time, gc_count}
+  [10:00:15] COUNTER web-1002   유사도 0.35  {sql_time, resp_time, gc_count}
+  [10:00:20] HITMAP  pcode-123  유사도 0.006
+  [10:00:20] QUANTILE /api/order   유사도 0.45
+  [10:00:20] QUANTILE /api/payment 유사도 0.41
+
+  → 전부 5분 이내 → 하나의 장애 그룹으로 묶임
+  → 최초 이벤트: db-2001 (10:00:05) — 이게 가장 먼저 이상해졌다</code></pre>
+
+<h4>10:00:20 — 3단계: 공통 메트릭을 찾는다</h4>
+
+<pre><code>카운터 이벤트 3개에서 20% 이상 벗어난 메트릭 추출:
+
+  db-2001:  {mem: 45%, sql_time: 80%,  act_svc_count: 60%}
+  web-1001: {sql_time: 130%, resp_time: 85%, gc_count: 40%}
+  web-1002: {sql_time: 125%, resp_time: 90%, gc_count: 35%}
+
+  2개 이상 서버에서 공통으로 벗어난 메트릭:
+    sql_time:       db +80%, web1 +130%, web2 +125% → 평균 +112%  ← 가장 심각
+    resp_time:      web1 +85%, web2 +90%            → 평균 +88%
+    act_svc_count:  db +60%, web1 +55%, web2 +50%   → 평균 +55%
+
+  패턴 매칭: sql_time ↑ + resp_time ↑
+  → 추정: "DB 쿼리 지연 → 응답시간 증가"</code></pre>
+
+<h4>10:00:20 — 4단계: 서버 상세를 확인한다</h4>
+
+<pre><code>db-2001이 최초 이벤트 → 이 서버의 상세 카운터를 확인:
+
+  힙 메모리:     88% (위험)
+  GC CPU 소모:    5% (정상)
+  스레드 풀:     60% (정상)
+  디스크 I/O:    45% (높음)
+  DB 커넥션 풀:  48/50 사용 (96%!), 대기 12건
+
+  → "DB 커넥션 풀이 거의 꽉 찼고, 12건이 대기 중"
+  → 커넥션을 잡은 쿼리들이 안 끝나고 있다는 의미</code></pre>
+
+<h4>10:00:20 — 5단계: 어떤 쿼리가 범인인가</h4>
+
+<pre><code>StatGeneralPack에서 db-2001의 슬로우 쿼리 조회:
+
+  SQL [0xAB3F]: 평소 200ms → 현재 8500ms (43배!)  342건 실행
+    "SELECT * FROM orders WHERE created_at > ? AND status IN (?, ?)
+     ORDER BY id DESC"
+
+  SQL [0xCD12]: 평소 80ms → 현재 3200ms (40배)  128건 실행
+    "SELECT COUNT(*) FROM order_items oi JOIN products p ON ..."
+
+  영향 받은 URL:
+    /api/order:        150ms → 4200ms (28배)  89건
+    /api/payment:      200ms → 3800ms (19배)  45건
+    /api/order/detail: 100ms → 2100ms (21배)  67건</code></pre>
+
+<div style="background:linear-gradient(135deg,var(--red),#d32f2f);color:#fff;padding:24px;border-radius:14px;margin:20px 0">
+  <strong style="font-size:18px">★ 최종 결과: 원인 체인</strong><br><br>
+  <div style="font-size:15px;line-height:2">
+  → [증상] 히트맵 분포가 평소와 완전히 다르다 (유사도 0.006)<br>
+  → [영향] /api/order, /api/payment 응답시간 20~28배 급증<br>
+  → [전파] 서버 3대(db-2001, web-1001, web-1002)에서 sql_time +112%<br>
+  → [원인] DB 커넥션 풀 96% 포화, 대기 12건, 디스크 I/O 45%<br>
+  → <strong style="font-size:17px">★ [근본원인] SELECT * FROM orders WHERE... (200ms → 8500ms, 43배, 342건)</strong>
+  </div>
 </div>
 
-<div style="background:#fff;border:2px solid var(--orange);border-radius:14px;padding:20px 24px;margin:20px 0;box-shadow:var(--shadow)">
-  <h4 style="margin-top:0;color:var(--orange)">시나리오 2: 외부 결제 API 장애</h4>
-  <table>
-    <tr><th>단계</th><th>감지 내용</th><th>데이터 출처</th></tr>
-    <tr><td>증상</td><td>히트맵 이상</td><td>hitmap.tqi</td></tr>
-    <tr><td>영향</td><td>/api/payment (67배), /api/checkout (60배)</td><td>quantile.tqi</td></tr>
-    <tr><td>전파</td><td>서버 2대 httpc_time +190%</td><td>counter.tqi</td></tr>
-    <tr><td>원인</td><td>스레드 풀 92% (외부 호출 대기로 점유)</td><td>서버 카운터</td></tr>
-    <tr><td style="color:var(--orange)"><strong>★ 근본원인</strong></td><td><strong>외부 결제 API 응답 지연 (180ms→12000ms)</strong></td><td>StatGeneral</td></tr>
-  </table>
+<h3>같은 방식으로 다른 장애도 추적한다</h3>
+
+<div class="vs">
+  <div>
+    <h4 style="color:var(--orange)">시나리오 2: 외부 API 장애</h4>
+    <p style="font-size:14px;color:var(--muted)">
+      → counter.tqi에서 <strong>httpc_time +190%</strong> 감지<br>
+      → 2대 서버에서 동시 발생 → 공통 메트릭: httpc_time<br>
+      → 서버 상세: 스레드 풀 92% (외부 호출 대기로 점유)<br>
+      → StatGeneral: /api/payment <strong>180ms→12000ms</strong> (67배)<br>
+      → <strong style="color:var(--orange)">★ 외부 결제 API 응답 지연이 원인</strong>
+    </p>
+  </div>
+  <div>
+    <h4 style="color:var(--purple)">시나리오 3: 메모리 릭</h4>
+    <p style="font-size:14px;color:var(--muted)">
+      → counter.tqi에서 <strong>heap +58%, gc +72%</strong> 점진적 증가<br>
+      → 1대 서버에서만 발생 (web-1001)<br>
+      → 서버 상세: 힙 94%, GC에 CPU 38% 소모<br>
+      → StatGeneral: /api/users <strong>50ms→800ms</strong> (16배)<br>
+      → <strong style="color:var(--purple)">★ 메모리 릭으로 GC 빈발, 모든 URL 느려짐</strong>
+    </p>
+  </div>
 </div>
 
-<div style="background:#fff;border:2px solid var(--purple);border-radius:14px;padding:20px 24px;margin:20px 0;box-shadow:var(--shadow)">
-  <h4 style="margin-top:0;color:var(--purple)">시나리오 3: 메모리 릭</h4>
-  <table>
-    <tr><th>단계</th><th>감지 내용</th><th>데이터 출처</th></tr>
-    <tr><td>증상</td><td>히트맵 이상</td><td>hitmap.tqi</td></tr>
-    <tr><td>전파</td><td>web-1001 heap +58%, gc +72%, gc_time +118%</td><td>counter.tqi</td></tr>
-    <tr><td>원인</td><td>힙 94%, GC에 CPU 38% 소모</td><td>서버 카운터</td></tr>
-    <tr><td style="color:var(--purple)"><strong>★ 근본원인</strong></td><td><strong>메모리 릭 → /api/users (50ms→800ms, 16배), /api/products (30ms→600ms, 20배)</strong></td><td>StatGeneral</td></tr>
-  </table>
+<div class="analogy blue">
+  <span class="label">3가지 시나리오의 공통점</span>
+  분석 방법은 동일하다. <strong>벡터 인덱스로 "이상"을 감지</strong>하고, <strong>시간으로 묶고</strong>, <strong>공통 메트릭으로 방향을 잡고</strong>, <strong>상세 데이터로 특정</strong>한다.<br><br>
+  다른 건 <strong>어떤 메트릭이 올라가느냐</strong>뿐이다.<br>
+  sql_time이면 DB 문제, httpc_time이면 외부 API 문제, heap이면 메모리 문제.<br>
+  이 패턴이 쌓이면 AI가 자동으로 학습할 수 있는 기반이 된다.
 </div>
 
 <h3>원인 추정은 어떻게 하는가?</h3>
