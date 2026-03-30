@@ -17,6 +17,7 @@
         <module>turboquant-storage</module>
         <module>turboquant-search</module>
         <module>turboquant-anomaly</module>
+        <module>turboquant-hitmap</module>
     </modules>
 
     <properties>
