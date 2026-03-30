@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TurboQuant A/B 테스트 — 실서비스 적용 결과</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap');
+:root{--accent:#4a6cf7;--green:#22a559;--orange:#e8850c;--red:#e04545;--purple:#8b5cf6;--light-accent:#eef2ff;--light-green:#ecfdf5;--light-orange:#fff7ed;--light-red:#fef2f2;--light-purple:#f5f3ff;--bg:#fefcf9;--text:#2c2c2c;--muted:#6b7280;--border:#e5e5e5;--shadow:0 2px 8px rgba(0,0,0,0.06)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);line-height:1.8;font-size:17px}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(254,252,249,0.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);height:56px;display:flex;align-items:center;overflow-x:auto;scrollbar-width:none;padding:0 20px;gap:8px}
+nav::-webkit-scrollbar{display:none}
+nav a{white-space:nowrap;text-decoration:none;color:var(--muted);font-size:14px;font-weight:500;padding:6px 14px;border-radius:20px;transition:all .2s}
+nav a:hover,nav a.active{color:var(--accent);background:var(--light-accent)}
+.hero{text-align:center;padding:100px 20px 50px;max-width:760px;margin:0 auto}
+.hero .badge{display:inline-block;background:var(--green);color:#fff;padding:4px 16px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:16px}
+.hero h1{font-size:clamp(28px,5vw,38px);font-weight:900;line-height:1.3;margin-bottom:12px}
+.hero .sub{color:var(--muted);font-size:18px}
+.content{max-width:760px;margin:0 auto;padding:0 20px 60px}
+chapter{display:block;padding-top:80px}
+h2{font-size:26px;font-weight:800;margin-bottom:20px;padding-bottom:10px;border-bottom:3px solid var(--accent)}
+h3{font-size:20px;font-weight:700;margin:32px 0 14px}
+h4{font-size:17px;font-weight:600;margin:20px 0 10px;color:var(--accent)}
+p{margin-bottom:14px}
+pre{background:#1e1e2e;color:#cdd6f4;padding:18px;border-radius:12px;overflow-x:auto;font-size:13px;line-height:1.6;margin:14px 0;font-family:'SF Mono',Consolas,monospace}
+code{font-family:'SF Mono',Consolas,monospace;background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:0.9em}
+pre code{background:none;padding:0}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:15px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)}
+th{font-weight:600;color:var(--muted);font-size:13px;text-transform:uppercase}
+tr:hover td{background:#f8fafc}
+.box{padding:18px 22px;border-radius:12px;margin:18px 0;border-left:4px solid}
+.box.blue{background:var(--light-accent);border-color:var(--accent)}
+.box.green{background:var(--light-green);border-color:var(--green)}
+.box.red{background:var(--light-red);border-color:var(--red)}
+.box.orange{background:var(--light-orange);border-color:var(--orange)}
+.box.purple{background:var(--light-purple);border-color:var(--purple)}
+.box .label{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;display:block}
+.box.blue .label{color:var(--accent)} .box.green .label{color:var(--green)}
+.box.red .label{color:var(--red)} .box.purple .label{color:var(--purple)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin:20px 0}
+.stat{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;box-shadow:var(--shadow)}
+.stat .num{font-size:28px;font-weight:900;line-height:1.2}
+.stat .label{color:var(--muted);font-size:12px;margin-top:4px}
+.stat.green .num{color:var(--green)} .stat.blue .num{color:var(--accent)} .stat.red .num{color:var(--red)} .stat.purple .num{color:var(--purple)}
+.highlight{background:linear-gradient(135deg,var(--accent),var(--purple));color:#fff;padding:22px 26px;border-radius:14px;margin:20px 0;font-size:15px;line-height:1.7}
+.flow{display:flex;flex-direction:column;align-items:center;gap:0;margin:20px 0}
+.flow .step{background:#fff;border:2px solid var(--border);border-radius:12px;padding:14px 22px;min-width:280px;text-align:center;font-weight:500;box-shadow:var(--shadow);font-size:15px}
+.flow .arrow{color:var(--accent);font-size:22px;line-height:1;padding:3px 0}
+.flow .step.active{border-color:var(--accent);background:var(--light-accent)}
+.flow .step.good{border-color:var(--green);background:var(--light-green)}
+.flow .step.bad{border-color:var(--red);background:var(--light-red)}
+footer{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px;border-top:1px solid var(--border)}
+footer a{color:var(--accent);text-decoration:none}
+@media(max-width:768px){.stats{grid-template-columns:1fr 1fr}nav{height:48px}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#env">환경</a>
+  <a href="#tq-data">TQ 데이터</a>
+  <a href="#tqi">TQI 인덱스</a>
+  <a href="#detect">이상 탐지</a>
+  <a href="#log">로그 분석</a>
+  <a href="#pipeline">파이프라인</a>
+</nav>
+
+<div class="hero">
+  <span class="badge">A/B 테스트 실증</span>
+  <h1>TurboQuant 실서비스 적용 결과</h1>
+  <div class="sub">AWS EC2에서 YARD에 TurboQuant를 적용하고,<br>실시간 이상 탐지까지 동작시킨 기록.</div>
+</div>
+
+<div class="content">
+
+<!-- 환경 -->
+<chapter id="env">
+<h2>테스트 환경</h2>
+
+<table>
+  <tr><th></th><th>A 서버 (대조군)</th><th>B 서버 (실험군)</th></tr>
+  <tr><td>IP</td><td>3.38.184.99</td><td><strong>3.37.44.244</strong></td></tr>
+  <tr><td>인스턴스</td><td>tq-ab-control</td><td>tq-ab-turboquant</td></tr>
+  <tr><td>EC2</td><td colspan="2">t3.large (8GB RAM), ap-northeast-2</td></tr>
+  <tr><td>YARD JAR</td><td>원본 (whatap.server.yard-2.9.30.0)</td><td><strong>원본 + TurboQuantFieldCodec 패치</strong></td></tr>
+  <tr><td>JVM 옵션</td><td>(기본)</td><td><code>-Dturboquant.field.compress=true</code></td></tr>
+  <tr><td>TurboQuant</td><td>OFF</td><td><strong>ON (4-bit, float → 양자화)</strong></td></tr>
+  <tr><td>대시보드</td><td>http://3.38.184.99:8083</td><td>http://3.37.44.244:8083</td></tr>
+</table>
+
+<div class="box blue">
+  <span class="label">패치 방법</span>
+  원본 fat JAR을 교체하지 않고, <code>jar uf</code>로 <strong>수정된 3개 클래스 + turboquant-core 클래스만 덮어쓰기</strong>.<br>
+  나머지 수백 개 클래스는 원본 그대로 유지 → 빌드 호환성 문제 없음.
+  <pre><code>jar uf yard-original.jar \
+  io/whatap/server/db/shard/SHARD_W.class \
+  io/whatap/server/db/shard/TurboQuantFieldCodec.class \
+  io/whatap/yard/db/tagc/TagCountDB*.class \
+  io/whatap/turboquant/core/*.class</code></pre>
+</div>
+</chapter>
+
+<!-- TQ 데이터 -->
+<chapter id="tq-data">
+<h2>TurboQuant 인코딩 데이터</h2>
+
+<p>B 서버의 .dat2 파일 중 <strong>12개가 TurboQuant로 인코딩</strong>되고, 7개는 원본(float 없거나 3개 미만).</p>
+
+<h3>TQ 적용된 카테고리</h3>
+<table>
+  <tr><th>카테고리</th><th>파일 수</th><th>크기</th><th>내용</th></tr>
+  <tr><td><strong>app_counter</strong></td><td>5</td><td>1.5 MB</td><td>서버 카운터 (CPU, TPS, GC 등) — raw + {m1} + {m5}</td></tr>
+  <tr><td><strong>app_host_resource</strong></td><td>3</td><td>320 KB</td><td>호스트 리소스 (메모리, 디스크) — raw + {m1} + {m5}</td></tr>
+  <tr><td><strong>app_counter_project</strong></td><td>2</td><td>17 KB</td><td>프로젝트 카운터 — raw + {m5}</td></tr>
+  <tr><td><strong>app_proc_counter</strong></td><td>2</td><td>61 KB</td><td>프로세스 카운터 — {m1} + {m5} 집계</td></tr>
+</table>
+
+<h3>TQ 미적용 카테고리</h3>
+<table>
+  <tr><th>카테고리</th><th>크기</th><th>이유</th></tr>
+  <tr><td>app_proc_counter (raw)</td><td>347 KB</td><td>float가 3개 미만</td></tr>
+  <tr><td>app_actx_meter</td><td>79 KB</td><td>float가 3개 미만</td></tr>
+  <tr><td>agent_status_summary</td><td>97 KB</td><td>Decimal만 (float 없음)</td></tr>
+  <tr><td>agent_dic, alert_count, hitmap</td><td>8 KB</td><td>float 없거나 데이터 너무 작음</td></tr>
+</table>
+
+<h3>.dat2 레코드 구조</h3>
+<pre><code>원본 레코드:
+  [int3 길이][_writeMap 바이트: bool + decimal + FloatValue(4B) + ...]
+
+TQ 인코딩 레코드:
+  [int3 길이][0x03][origLen 2B][floatCount 2B][metaLen 2B][meta bytes][TQ compressed bytes]
+                ↑
+          VERSION_TQ 헤더
+
+TQ compressed bytes:
+  TurboQuantizer(4-bit, dim=floatCount).compress(floats)
+  = [4B norm] + [floatCount × 4 / 8 bytes packed indices]
+
+예: floatCount=39 → 원본 156B(39×4B) → TQ 24B(4B norm + 20B packed) = 6.5x 압축</code></pre>
+
+<div class="box green">
+  <span class="label">판단 기준</span>
+  <strong>float가 3개 이상</strong>인 레코드만 TQ 인코딩. 그 이하는 오버헤드가 커서 원본 유지.<br>
+  읽기 경로에서 첫 바이트가 0x03이면 TQ 디코딩, 아니면 원본 그대로 — <strong>하위호환 100%</strong>.
+</div>
+</chapter>
+
+<!-- TQI 벡터 인덱스 -->
+<chapter id="tqi">
+<h2>TQI 벡터 인덱스</h2>
+
+<p>B 서버에서 <code>TqiServerDaemon</code>이 .dat2를 읽어 .tqi 벡터 인덱스를 구축합니다.</p>
+
+<div class="stats">
+  <div class="stat blue"><div class="num">10</div><div class="label">벡터 차원 (FloatValue 수)</div></div>
+  <div class="stat purple"><div class="num">9B</div><div class="label">벡터당 크기</div></div>
+  <div class="stat green"><div class="num">4-bit</div><div class="label">TurboQuant 양자화</div></div>
+  <div class="stat blue"><div class="num">5초</div><div class="label">스캔 주기</div></div>
+</div>
+
+<h3>.tqi 파일 구조</h3>
+<pre><code>/data/whatap-server/tqindex/live.tqi
+
+헤더 (20B):
+  magic: "TQI1"
+  dim: 10, bits: 4, compressedSize: 9, seed: 42
+
+엔트리 (33B each):
+  time(8B) + pcode(8B) + oid(4B) + totalHits(4B) + compressed(9B)
+
+1000개 = 33KB
+100만개 = 33MB</code></pre>
+
+<h3>서버 데몬 동작 로그</h3>
+<pre><code>[TQI 데몬] 시작 — yardbase: /data/whatap-server/yardbase
+[TQI 데몬] tqindex: /data/whatap-server/tqindex
+[TQI 데몬] dim=10, 9B/벡터
+[13:32:04] +93벡터 (tqi:93, 이상:0, 누적:0)
+[13:32:30] 베이스라인 구축: 200벡터, .tqi 6620B
+[13:33:15] +210벡터 (tqi:503, 이상:114, 누적:114)
+[13:34:07] +500벡터 (tqi:1817, 이상:1524, 누적:1524)</code></pre>
+
+<div class="box blue">
+  <span class="label">동작 흐름</span>
+  1. 5초마다 yardbase의 최신 .dat2 스캔<br>
+  2. 새 레코드 발견 → TQ 디코딩 → float 벡터 추출<br>
+  3. TurboQuantizer로 압축 → .tqi에 append<br>
+  4. 처음 200개로 베이스라인 벡터 구축<br>
+  5. 이후 벡터마다 베이스라인과 코사인 유사도 비교
+</div>
+</chapter>
+
+<!-- 이상 탐지 -->
+<chapter id="detect">
+<h2>이상 탐지</h2>
+
+<p>베이스라인 벡터와 현재 벡터의 <strong>코사인 유사도</strong>가 0.80 이하면 이상으로 판정합니다.</p>
+
+<div class="stats">
+  <div class="stat green"><div class="num">~1.0</div><div class="label">정상 유사도</div></div>
+  <div class="stat red"><div class="num">0.67~0.80</div><div class="label">이상 유사도</div></div>
+  <div class="stat purple"><div class="num">0.80</div><div class="label">임계값</div></div>
+  <div class="stat blue"><div class="num">1,524</div><div class="label">총 이상 감지</div></div>
+</div>
+
+<h3>이상 탐지 로그</h3>
+<pre><code>⚠ 이상 #1 [13:32:30] tqi#202 유사도=0.7735
+  유사: tqi#152 (1.0000)    ← 과거에 비슷한 벡터가 있었음
+
+⚠ 이상 #5 [13:32:31] tqi#206 유사도=0.6961
+  유사: tqi#156 (0.9967)
+
+⚠ 이상 #1514 [13:34:06] tqi#1807 유사도=0.6698
+  (가장 낮은 유사도 — 가장 심한 이상)</code></pre>
+
+<h3>정상 vs 이상 시나리오</h3>
+
+<div class="flow">
+  <div class="step good"><strong>정상 구간</strong>: 5에이전트, 2초 간격<br>유사도 ~1.0 (베이스라인과 동일 패턴)</div>
+  <div class="arrow">↓ 에이전트 5→20 급증</div>
+  <div class="step bad"><strong>이상 구간</strong>: 20에이전트, 1초 간격<br>유사도 <strong>0.67~0.80</strong> (패턴 변화 감지)</div>
+</div>
+
+<div class="box red">
+  <span class="label">감지 원리</span>
+  TurboQuant는 벡터의 <strong>"방향(패턴)"</strong>을 보존합니다.<br>
+  에이전트가 5→20으로 늘어나면 메트릭 벡터의 방향이 바뀌고,<br>
+  코사인 유사도가 떨어져서 자동으로 이상으로 판정됩니다.<br><br>
+  개별 메트릭 threshold("CPU > 90%")가 아니라<br>
+  <strong>전체 메트릭 패턴의 변화</strong>를 한 숫자(유사도)로 감지하는 것이 핵심입니다.
+</div>
+</chapter>
+
+<!-- 로그 분석 -->
+<chapter id="log">
+<h2>이상 탐지 로그 분석 방법</h2>
+
+<h3>로그 위치</h3>
+<pre><code># B 서버에서
+cat /data/whatap-server/logs/tq-daemon.log
+
+# 이상만 필터
+grep "⚠ 이상" /data/whatap-server/logs/tq-daemon.log
+
+# 유사도 분포
+grep "유사도=" /data/whatap-server/logs/tq-daemon.log | \
+  sed 's/.*유사도=//' | sort | uniq -c | sort -rn</code></pre>
+
+<h3>로그 해석</h3>
+<pre><code>⚠ 이상 #5 [13:32:31] tqi#206 유사도=0.6961
+  유사: tqi#156 (0.9967)
+  │       │        │           │             │         │
+  │       │        │           │             │         └ 과거에 비슷한 벡터
+  │       │        │           │             └ 베이스라인 대비 코사인 유사도
+  │       │        │           └ .tqi 파일 내 벡터 인덱스 번호
+  │       │        └ 감지 시각
+  │       └ 누적 이상 번호
+  └ 이상 표시</code></pre>
+
+<h3>유사도 수준별 의미</h3>
+<table>
+  <tr><th>유사도</th><th>의미</th><th>조치</th></tr>
+  <tr><td><strong>0.95~1.00</strong></td><td>정상 — 베이스라인과 거의 동일</td><td>없음</td></tr>
+  <tr><td><strong>0.80~0.95</strong></td><td>주의 — 약간의 패턴 변화</td><td>모니터링</td></tr>
+  <tr><td style="color:var(--red)"><strong>0.60~0.80</strong></td><td>이상 — 뚜렷한 패턴 변화</td><td>원인 조사</td></tr>
+  <tr><td style="color:var(--red)"><strong>&lt; 0.60</strong></td><td>심각 — 완전히 다른 패턴</td><td>즉시 대응</td></tr>
+</table>
+
+<h3>"유사 과거 벡터" 활용</h3>
+<pre><code>⚠ 이상 #1 [13:32:30] tqi#202 유사도=0.7735
+  유사: tqi#152 (1.0000)
+                  ↑
+  "과거 벡터 #152와 거의 동일한 패턴"
+  → tqi#152 시점에 무슨 일이 있었는지 확인
+  → 같은 종류의 이상이 반복되는 건지 판단</code></pre>
+
+<div class="box purple">
+  <span class="label">활용 시나리오</span>
+  <strong>1. 장애 재현 분석</strong>: "이 이상 패턴이 과거에도 있었나?" → 유사 벡터 검색<br>
+  <strong>2. 반복 장애 감지</strong>: 같은 유사도 패턴이 주기적으로 나타나면 근본 원인 미해결<br>
+  <strong>3. 영향 범위 추적</strong>: 같은 시간대 다른 카테고리(.dat2)에서도 이상이 나타나는지 교차 확인
+</div>
+</chapter>
+
+<!-- 전체 파이프라인 -->
+<chapter id="pipeline">
+<h2>전체 파이프라인</h2>
+
+<div class="flow">
+  <div class="step">에이전트 → <strong>YARD TCP:6610</strong><br><small>CounterPack, TagCountPack</small></div>
+  <div class="arrow">↓</div>
+  <div class="step active"><strong>TurboQuantFieldCodec.encode()</strong><br><small>float 추출 → 4-bit 양자화 → .dat2 저장</small></div>
+  <div class="arrow">↓ 5초마다 스캔</div>
+  <div class="step active"><strong>TqiServerDaemon</strong><br><small>.dat2 읽기 → TQ 디코딩 → float 벡터 추출</small></div>
+  <div class="arrow">↓</div>
+  <div class="step"><strong>TurboQuantizer.compress()</strong><br><small>벡터 → 9B 압축 → .tqi append</small></div>
+  <div class="arrow">↓</div>
+  <div class="step"><strong>코사인 유사도 비교</strong><br><small>현재 벡터 vs 베이스라인 (200개 평균)</small></div>
+  <div class="arrow">↓ 유사도 &lt; 0.80</div>
+  <div class="step bad"><strong>⚠ 이상 감지</strong><br><small>로그 + 유사 과거 벡터 검색 + 분석</small></div>
+</div>
+
+<h3>파일 구조</h3>
+<pre><code>/data/whatap-server/
+├── yardbase/1/1/20260330/13/tagc/
+│   ├── tagc-app_counter.dat2        [TQ] 1.5MB  ← TurboQuant 인코딩
+│   ├── tagc-app_host_resource.dat2  [TQ] 320KB
+│   ├── tagc-app_proc_counter.dat2   [  ] 347KB  ← 원본 (float 부족)
+│   └── ...
+├── tqindex/
+│   └── live.tqi                     6.6KB  ← 벡터 인덱스 (200+ 벡터)
+├── logs/
+│   ├── yard.log                     ← YARD 서비스 로그
+│   └── tq-daemon.log                ← 이상 탐지 데몬 로그
+├── lib/
+│   └── whatap.server.yard-2.9.30.0.jar  ← TQ 패치 포함
+├── tq-daemon.jar                    104KB  ← 이상 탐지 데몬
+└── tq-common.jar                    ← whatap.server.common</code></pre>
+
+<h3>서비스 관리</h3>
+<pre><code># YARD (TurboQuant 활성화)
+java -Dturboquant.field.compress=true -jar lib/whatap.server.yard-2.9.30.0.jar
+
+# TQI 이상 탐지 데몬
+java -cp "tq-daemon.jar:tq-common.jar" TqiServerDaemon
+
+# 비활성화 (롤백)
+# JVM 옵션에서 -Dturboquant.field.compress=true 제거
+# 이미 저장된 TQ 데이터도 자동 디코딩됨 (하위호환)</code></pre>
+
+<div class="highlight">
+  <strong>핵심 성과</strong><br><br>
+  ✅ TurboQuant 4-bit 인코딩이 실서비스 YARD에서 동작<br>
+  ✅ 12개 .dat2 파일이 TQ 인코딩 (float 메트릭 데이터)<br>
+  ✅ .tqi 벡터 인덱스가 서버에서 직접 구축<br>
+  ✅ 이상 탐지 데몬이 실시간으로 패턴 변화 감지<br>
+  ✅ 1,524건 이상을 코사인 유사도로 자동 판정<br>
+  ✅ 에러 0, Broken pipe 0, 대시보드 정상
+</div>
+</chapter>
+
+</div>
+
+<footer>
+  <p><strong>TurboQuant A/B 테스트 — 2026-03-30</strong></p>
+  <p>소스: <a href="https://github.com/whatap/yard_poc_TurboQuant">whatap/yard_poc_TurboQuant</a> ·
+     PoC 문서: <a href="https://whatap.github.io/yard_poc_TurboQuant/">whatap.github.io/yard_poc_TurboQuant</a></p>
+</footer>
+
+<script>
+const sections = document.querySelectorAll('chapter');
+const navLinks = document.querySelectorAll('nav a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => { if (scrollY >= s.offsetTop - 100) current = s.id; });
+  navLinks.forEach(a => { a.classList.toggle('active', a.getAttribute('href') === '#' + current); });
+});
+</script>
+</body>
+</html>
