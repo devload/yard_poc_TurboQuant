@@ -76,6 +76,7 @@ footer a{color:var(--accent);text-decoration:none}
   <a href="#ch5">Ch.5 그룹 회전</a>
   <a href="#ch6">Ch.6 결론</a>
   <a href="#ch7">Ch.7 실증</a>
+  <a href="#ch8">Ch.8 파일 저장</a>
 </nav>
 
 <!-- Hero -->
@@ -651,6 +652,107 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
     <td style="color:var(--green)"><strong>같은 유형만 검색됨</strong></td><td>튜닝 필요</td>
   </tr>
 </table>
+
+</chapter>
+
+<!-- Ch.8 파일 기반 벡터 인덱스 -->
+<chapter id="ch8">
+<h2>Ch.8 &mdash; 벡터 인덱스를 파일로 저장하기</h2>
+
+<p>Ch.7까지는 벡터 인덱스가 메모리에만 있었다. YARD가 재시작되면 다 날아간다. 실서비스에서 쓰려면 <strong>파일로 저장하고, 재시작 시 복원</strong>할 수 있어야 한다.</p>
+
+<h3>.tqi 파일 포맷</h3>
+
+<p>YARD의 yardbase 파일 구조와 같은 패턴으로, 벡터 인덱스 전용 파일 포맷(.tqi)을 만들었다.</p>
+
+<pre><code>yardbase/1/20260330/02/
+├── tagc/           ← 기존 메트릭
+├── db3tx/          ← 기존 히트맵
+└── tqindex/        ← 벡터 인덱스 (신규)
+    └── hitmap.tqi
+
+.tqi 파일 내부:
+┌──── 헤더 (20바이트) ────┐
+│ magic: "TQI1"           │
+│ dim: 120, bits: 4       │
+│ compressedSize: 64      │
+│ rotationSeed: 42        │
+├──── 엔트리 반복 ────────┤
+│ time (8B)               │
+│ pcode (8B)              │
+│ oid (4B)                │
+│ totalHits (4B)          │
+│ compressed (64B)        │
+│ ── 엔트리당 88바이트 ── │
+└─────────────────────────┘</code></pre>
+
+<div class="analogy blue">
+  <span class="label">설계 원칙</span>
+  <strong>Append-only</strong>: 새 데이터는 파일 끝에 추가만 한다. 기존 데이터를 수정하지 않으므로 안전하다.<br>
+  <strong>고정 크기 엔트리</strong>: 모든 엔트리가 88바이트로 동일. n번째 엔트리 위치 = 20 + n × 88. 랜덤 액세스가 가능하다.<br>
+  <strong>재시작 복원</strong>: 파일을 열고 헤더만 읽으면 끝. 엔트리 수 = (파일 크기 - 20) / 88. 0.16ms면 완료.
+</div>
+
+<h3>실측 결과: 105개 히트맵</h3>
+
+<div class="stats">
+  <div class="stat green"><div class="num">9.0KB</div><div class="label">파일 크기 (105개 벡터)</div></div>
+  <div class="stat blue"><div class="num">5.4x</div><div class="label">압축률 (원본 50KB)</div></div>
+  <div class="stat green"><div class="num">0.16ms</div><div class="label">재시작 복원 시간</div></div>
+  <div class="stat green"><div class="num">5/5</div><div class="label">이상 탐지 (TP:5, FP:0)</div></div>
+</div>
+
+<table>
+  <tr><th>동작</th><th>시간</th><th>설명</th></tr>
+  <tr><td>파일 생성 + 105개 쓰기</td><td>&lt;1ms</td><td>append-only, 순차 쓰기</td></tr>
+  <tr><td>파일 열기 (재시작 복원)</td><td><strong>0.16ms</strong></td><td>헤더만 읽고 엔트리 수 계산</td></tr>
+  <tr><td>전수 검색 (105개)</td><td>4.12ms</td><td>모든 벡터 decompress + 코사인 유사도</td></tr>
+  <tr><td>이상 탐지</td><td>&lt;1ms</td><td>베이스라인 대비 코사인 유사도</td></tr>
+</table>
+
+<h3>검색 결과: 이상 히트맵으로 쿼리</h3>
+
+<p>이상 히트맵(응답시간 5~10초 급증)으로 "비슷한 과거 시점"을 검색하면:</p>
+
+<table>
+  <tr><th>순위</th><th>유사도</th><th>유형</th><th>의미</th></tr>
+  <tr><td>#1~#4</td><td style="color:var(--red)"><strong>0.87~0.94</strong></td><td>이상</td><td>같은 이상 패턴끼리 높은 유사도</td></tr>
+  <tr><td>#5~#10</td><td><strong>0.03~0.05</strong></td><td>정상</td><td>정상 패턴과는 완전히 다름</td></tr>
+</table>
+
+<div class="analogy green">
+  <span class="label">의미</span>
+  이상 히트맵끼리는 유사도 <strong>0.87~0.94</strong>, 정상 히트맵과는 <strong>0.03~0.05</strong>.<br>
+  차이가 <strong>20배</strong>나 나므로 명확하게 구분된다. 임계값 설정이 쉽다.
+</div>
+
+<h3>스케일: 얼마나 큰 데이터를 담을 수 있나?</h3>
+
+<table>
+  <tr><th>벡터 수</th><th>.tqi 크기</th><th>원본 크기</th><th>기간 (5분 간격)</th></tr>
+  <tr><td>1,000</td><td>86 KB</td><td>469 KB</td><td>~3.5일</td></tr>
+  <tr><td>10,000</td><td>859 KB</td><td>4.6 MB</td><td>~35일</td></tr>
+  <tr><td>100,000</td><td>8.4 MB</td><td>45.8 MB</td><td>~1년</td></tr>
+  <tr><td><strong>1,000,000</strong></td><td><strong>83.9 MB</strong></td><td>457.8 MB</td><td><strong>~9.5년</strong></td></tr>
+</table>
+
+<div class="highlight-box">
+  <strong>100만 개 히트맵 = 84MB 파일 하나.</strong><br>
+  5분 간격으로 9.5년치 히트맵 패턴을 84MB에 담을 수 있다.<br>
+  "3년 전 같은 시즌에도 이런 패턴이었나?"를 즉시 검색할 수 있다.
+</div>
+
+<h3>벡터 인덱스가 쌓이면?</h3>
+
+<p>이 파일에 데이터가 계속 쌓이면 <strong>AI 모델 학습의 기반</strong>이 된다.</p>
+
+<div class="flow">
+  <div class="step"><strong>지금</strong>: .tqi 파일에 벡터가 쌓인다<br><span style="color:var(--muted)">수학적 유사도로 검색/탐지</span></div>
+  <div class="arrow">↓ 데이터 축적</div>
+  <div class="step"><strong>다음</strong>: 쌓인 벡터 + 실제 장애 기록으로 모델 학습<br><span style="color:var(--muted)">"이 패턴일 때 장애가 났었다"를 학습</span></div>
+  <div class="arrow">↓ 모델 개선</div>
+  <div class="step active"><strong>목표</strong>: 장애를 사전에 예측<br><span style="color:var(--muted)">"지금 패턴이 과거 장애 직전과 비슷합니다"</span></div>
+</div>
 
 </chapter>
 </div>
