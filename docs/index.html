@@ -77,6 +77,7 @@ footer a{color:var(--accent);text-decoration:none}
   <a href="#ch6">Ch.6 결론</a>
   <a href="#ch7">Ch.7 실증</a>
   <a href="#ch8">Ch.8 파일 저장</a>
+  <a href="#ch9">Ch.9 원인 추적</a>
 </nav>
 
 <!-- Hero -->
@@ -752,6 +753,132 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
   <div class="step"><strong>다음</strong>: 쌓인 벡터 + 실제 장애 기록으로 모델 학습<br><span style="color:var(--muted)">"이 패턴일 때 장애가 났었다"를 학습</span></div>
   <div class="arrow">↓ 모델 개선</div>
   <div class="step active"><strong>목표</strong>: 장애를 사전에 예측<br><span style="color:var(--muted)">"지금 패턴이 과거 장애 직전과 비슷합니다"</span></div>
+</div>
+
+</chapter>
+
+<!-- Ch.9 장애 근본 원인 추적 -->
+<chapter id="ch9">
+<h2>Ch.9 &mdash; 장애가 나면: 벡터로 원인을 찾아간다</h2>
+
+<p>모니터링의 궁극적 목표는 <strong>"장애 났다 → 왜?"</strong>를 빠르게 답하는 것이다. 지금까지 만든 벡터 인덱스 3개를 <strong>시간으로 연결</strong>하면, 이상 감지부터 근본 원인까지 자동으로 추적할 수 있다.</p>
+
+<h3>원리: 시간으로 묶는다</h3>
+
+<p>히트맵, 서버 카운터, 퍼센타일은 각각 독립적으로 이상을 감지한다. 그런데 <strong>같은 시간(±5분)에 여러 인덱스에서 이상이 동시에 나타나면</strong>, 이것들은 같은 장애의 증상일 가능성이 높다.</p>
+
+<div class="analogy blue">
+  <span class="label">비유: 병원 진찰</span>
+  환자가 "배가 아파요"라고 하면 의사는 하나만 보지 않는다.<br>
+  &nbsp;&nbsp;혈압 → 정상? &nbsp;&nbsp;체온 → 열 있나? &nbsp;&nbsp;혈액검사 → 염증 수치는?<br><br>
+  <strong>여러 검사 결과를 동시에 보고 "어디가 문제인지" 판단</strong>하는 것과 같다.<br>
+  벡터 인덱스는 각각이 하나의 "검사 장비"이고, 시간으로 묶는 것이 "종합 진찰"이다.
+</div>
+
+<h3>분석 흐름: 5단계 드릴다운</h3>
+
+<div class="flow">
+  <div class="step bad"><strong>1단계: 이상 감지</strong><br>히트맵 유사도 0.006 → "응답시간 분포가 평소와 완전히 다르다"</div>
+  <div class="arrow">↓ 같은 시간에 다른 인덱스도 이상한 게 있나?</div>
+  <div class="step bad"><strong>2단계: 동시 이벤트 수집</strong><br>서버 3대 이상 (db-2001, web-1001, web-1002)<br>URL 2개 이상 (/api/order, /api/payment)</div>
+  <div class="arrow">↓ 이 서버들의 공통점은?</div>
+  <div class="step"><strong>3단계: 공통 메트릭 분석</strong><br>sql_time +121%, resp_time +98%, mem +48%<br>→ "SQL이 느려지면서 응답시간이 올라갔다"</div>
+  <div class="arrow">↓ 왜 SQL이 느려졌나?</div>
+  <div class="step"><strong>4단계: 서버 상세 확인</strong><br>DB 커넥션 풀 96% 포화 (48/50), 대기 12건<br>힙 메모리 88%, 디스크 I/O 45%</div>
+  <div class="arrow">↓ 어떤 쿼리가 문제인가?</div>
+  <div class="step good"><strong>★ 5단계: 근본 원인</strong><br>SELECT * FROM orders WHERE... <strong>(200ms → 8500ms, 43배 느려짐, 342건)</strong><br>/api/order (150ms→4200ms), /api/payment (200ms→3800ms)</div>
+</div>
+
+<h3>데이터 흐름: 어디서 어떤 데이터를 가져오는가</h3>
+
+<pre><code>[ 벡터 인덱스 레이어 ] ──── 이상 감지 ────
+  hitmap.tqi    → 유사도 0.006 → "히트맵 이상!"
+  counter.tqi   → 유사도 0.35  → "서버 web-1001 이상!"
+  quantile.tqi  → 유사도 0.45  → "/api/order 분포 이상!"
+       │
+       ↓ 시간 윈도우(±5분)로 그룹핑
+       │
+[ 연관 분석 레이어 ] ──── 원인 추적 ────
+  같은 시각 이벤트 묶기
+  → {db-2001, web-1001, web-1002, /api/order, /api/payment}
+       │
+       ↓ 공통 메트릭 추출
+       │
+  sql_time: db-2001 +80%, web-1001 +130%, web-1002 +125%
+  resp_time: 전부 +85~120%
+  → "SQL이 공통 원인"
+       │
+       ↓ YARD 상세 데이터 조회
+       │
+[ YARD 기존 데이터 ] ──── 심층 추적 ────
+  DB 카운터    → 커넥션 풀 48/50, 대기 12건
+  StatGeneral  → 슬로우 쿼리 0xAB3F: 200ms→8500ms
+  프로필       → /api/order 트랜잭션에서 이 쿼리 호출
+       │
+       ↓
+  ★ "이 쿼리가 범인"</code></pre>
+
+<div class="analogy green">
+  <span class="label">핵심</span>
+  벡터 인덱스는 <strong>"뭔가 이상하다"를 빠르게 감지</strong>하는 역할이고,<br>
+  YARD의 기존 데이터(DB 카운터, 슬로우 쿼리, 프로필)는 <strong>"왜 이상한가"를 설명</strong>하는 역할이다.<br><br>
+  이 둘을 <strong>시간으로 연결</strong>하면, 감지부터 원인까지 자동으로 이어진다.
+</div>
+
+<h3>실증: 3가지 장애 시나리오</h3>
+
+<div style="background:#fff;border:2px solid var(--red);border-radius:14px;padding:20px 24px;margin:20px 0;box-shadow:var(--shadow)">
+  <h4 style="margin-top:0;color:var(--red)">시나리오 1: DB 커넥션 풀 고갈</h4>
+  <table>
+    <tr><th>단계</th><th>감지 내용</th><th>데이터 출처</th></tr>
+    <tr><td>증상</td><td>히트맵 분포 이상</td><td>hitmap.tqi</td></tr>
+    <tr><td>영향</td><td>/api/order, /api/payment 응답 급증</td><td>quantile.tqi</td></tr>
+    <tr><td>전파</td><td>서버 3대 sql_time +121%</td><td>counter.tqi</td></tr>
+    <tr><td>원인</td><td>DB 커넥션 풀 96% 포화, 대기 12건</td><td>DB 카운터</td></tr>
+    <tr><td style="color:var(--red)"><strong>★ 근본원인</strong></td><td><strong>SELECT * FROM orders... (200ms→8500ms, 43배, 342건)</strong></td><td>StatGeneral</td></tr>
+  </table>
+</div>
+
+<div style="background:#fff;border:2px solid var(--orange);border-radius:14px;padding:20px 24px;margin:20px 0;box-shadow:var(--shadow)">
+  <h4 style="margin-top:0;color:var(--orange)">시나리오 2: 외부 결제 API 장애</h4>
+  <table>
+    <tr><th>단계</th><th>감지 내용</th><th>데이터 출처</th></tr>
+    <tr><td>증상</td><td>히트맵 이상</td><td>hitmap.tqi</td></tr>
+    <tr><td>영향</td><td>/api/payment (67배), /api/checkout (60배)</td><td>quantile.tqi</td></tr>
+    <tr><td>전파</td><td>서버 2대 httpc_time +190%</td><td>counter.tqi</td></tr>
+    <tr><td>원인</td><td>스레드 풀 92% (외부 호출 대기로 점유)</td><td>서버 카운터</td></tr>
+    <tr><td style="color:var(--orange)"><strong>★ 근본원인</strong></td><td><strong>외부 결제 API 응답 지연 (180ms→12000ms)</strong></td><td>StatGeneral</td></tr>
+  </table>
+</div>
+
+<div style="background:#fff;border:2px solid var(--purple);border-radius:14px;padding:20px 24px;margin:20px 0;box-shadow:var(--shadow)">
+  <h4 style="margin-top:0;color:var(--purple)">시나리오 3: 메모리 릭</h4>
+  <table>
+    <tr><th>단계</th><th>감지 내용</th><th>데이터 출처</th></tr>
+    <tr><td>증상</td><td>히트맵 이상</td><td>hitmap.tqi</td></tr>
+    <tr><td>전파</td><td>web-1001 heap +58%, gc +72%, gc_time +118%</td><td>counter.tqi</td></tr>
+    <tr><td>원인</td><td>힙 94%, GC에 CPU 38% 소모</td><td>서버 카운터</td></tr>
+    <tr><td style="color:var(--purple)"><strong>★ 근본원인</strong></td><td><strong>메모리 릭 → /api/users (50ms→800ms, 16배), /api/products (30ms→600ms, 20배)</strong></td><td>StatGeneral</td></tr>
+  </table>
+</div>
+
+<h3>원인 추정은 어떻게 하는가?</h3>
+
+<p>공통 메트릭 패턴을 보고 원인 카테고리를 판별한다.</p>
+
+<table>
+  <tr><th>공통 메트릭 패턴</th><th>추정 원인</th></tr>
+  <tr><td>sql_time ↑ + resp_time ↑</td><td>DB 쿼리 지연</td></tr>
+  <tr><td>httpc_time ↑ + resp_time ↑</td><td>외부 API 지연</td></tr>
+  <tr><td>heap_use ↑ + gc_count ↑ + gc_time ↑</td><td>메모리 부족 / GC 빈발</td></tr>
+  <tr><td>cpu ↑ (sql 정상)</td><td>CPU 과부하</td></tr>
+  <tr><td>mem ↑ (OS 레벨)</td><td>서버 메모리 부족</td></tr>
+</table>
+
+<div class="analogy purple">
+  <span class="label">한계와 다음 단계</span>
+  현재는 <strong>규칙 기반</strong>으로 원인을 추정한다. "sql_time이 올라가면 DB 문제"라는 패턴을 사람이 정의한 것이다.<br><br>
+  데이터가 쌓이면 이 패턴을 <strong>AI가 스스로 학습</strong>할 수 있다. "과거에 이 메트릭 조합일 때 실제 원인이 뭐였는가"를 학습하면, 사람이 정의하지 않은 새로운 장애 패턴도 추정할 수 있게 된다.
 </div>
 
 </chapter>
