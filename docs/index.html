@@ -286,12 +286,23 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
   8-bit에서 모든 메트릭이 <strong>0.4% 이하 오차</strong>. 대시보드에서 구분 불가능.
 </div>
 
-<h3>더 놀라운 발견: 적응형 코드북을 이겼다</h3>
+<h3>더 놀라운 발견: "맞춤 눈금" 방식을 이겼다</h3>
 
-<p>8-bit에서 "그룹 회전 + 중심값 + 정규화"가 회전 없는 적응형 코드북보다 <strong>오히려 더 정확했다.</strong></p>
+<p>비교 대상으로 <strong>"적응형 코드북"</strong>이라는 방법도 테스트했다. 이건 회전을 아예 하지 않고, 대신 <strong>실제 데이터 분포에서 자주 나오는 값들을 대표값(눈금)으로 미리 학습</strong>해두는 방식이다.</p>
+
+<div class="analogy blue">
+  <span class="label">적응형 코드북이란?</span>
+  시계 눈금을 균등하게 배치하는 대신, <strong>데이터가 많이 몰리는 구간에 눈금을 촘촘하게</strong> 배치하는 것.<br><br>
+  예: CPU가 대부분 40~80%라면<br>
+  &nbsp;&nbsp;균등 눈금: 0, 6.25, 12.5, 18.75, 25, ... (0~40%에 쓸데없이 많은 눈금)<br>
+  &nbsp;&nbsp;<strong>적응형 눈금: 14, 31, 42, 49, 54, 58, 62, 66, 70, 75, 81, 88, 96</strong> (40~80%에 집중)<br><br>
+  회전 없이 각 메트릭의 값을 가장 가까운 눈금에 매핑하므로, 다른 메트릭 값의 영향을 받지 않는다.
+</div>
+
+<p>그런데 8-bit에서 "그룹 회전 TurboQuant"가 이 적응형 코드북보다 <strong>오히려 더 정확했다.</strong></p>
 
 <table>
-<tr><th>메트릭</th><th>그룹+중심 TQ 8-bit</th><th>적응형 8-bit (회전X)</th></tr>
+<tr><th>메트릭</th><th>그룹+중심 TQ 8-bit</th><th>적응형 코드북 8-bit (회전X)</th></tr>
 <tr><td>TPS</td><td style="color:var(--green)"><strong>0.25%</strong></td><td>0.50%</td></tr>
 <tr><td>GC</td><td style="color:var(--green)"><strong>0.27%</strong></td><td>0.43%</td></tr>
 <tr><td>Error</td><td style="color:var(--green)"><strong>0.36%</strong></td><td>0.51%</td></tr>
@@ -304,22 +315,29 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
   회전의 "값 섞임"이 같은 스케일 내에서는 부작용이 아니라 <strong>오차 분산 효과</strong>로 작용한다.
 </div>
 
-<h3>적응형 코드북 단독 결과</h3>
+<h3>적응형 코드북(맞춤 눈금) 단독 결과</h3>
 
-<p>회전을 쓰지 않고, 메트릭별로 "자주 나오는 값에 코드북을 집중"하는 것만으로도 큰 효과가 있었다.</p>
+<p>회전을 쓰지 않고, 메트릭별로 <strong>"자주 나오는 값에 눈금을 집중"</strong>하는 것만으로도 큰 효과가 있었다. 5-bit(32개 눈금)이면 대부분 메트릭에서 오차 4% 이하.</p>
 
 <div class="stats">
-  <div class="stat blue"><div class="num">6.4x</div><div class="label">5-bit 적응형 압축률</div></div>
+  <div class="stat blue"><div class="num">6.4x</div><div class="label">5-bit 맞춤 눈금 압축률</div></div>
   <div class="stat green"><div class="num">&lt;4%</div><div class="label">대부분 메트릭 오차</div></div>
-  <div class="stat purple"><div class="num">32개</div><div class="label">코드북 대표값</div></div>
+  <div class="stat purple"><div class="num">32개</div><div class="label">메트릭당 대표값</div></div>
 </div>
 
-<pre><code>CPU 적응형 코드북 (5-bit, 32개):
+<pre><code>CPU용 맞춤 눈금 (5-bit, 32개 대표값):
 [3.2, 12.8, 21.5, 28.6, 34.5, 39.6, 44.1, 48.3, 52.1, 55.8,
  59.2, 62.6, 65.9, 69.3, 73.0, ...]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               CPU가 주로 40~80%에 몰리니 이 구간에 촘촘하게 배치
 
-→ CPU가 주로 40~80%에 몰려 있으니 그 구간에 촘촘하게 배치
-→ 73.12% → 73.0 (오차 0.12)</code></pre>
+원본 73.12% → 가장 가까운 눈금 73.0 → 오차 0.12 (구분 불가)</code></pre>
+
+<div class="analogy blue">
+  <span class="label">맞춤 눈금의 핵심</span>
+  메트릭 유형별로 한 번만 눈금을 학습하면 된다. CPU용 32개, TPS용 32개, Response Time용 32개...<br>
+  각 눈금 세트는 32 × 4바이트 = <strong>128바이트</strong>. 서버 설정에 저장해도 무시할 수 있는 크기다.
+</div>
 </chapter>
 
 <!-- Ch.6 -->
@@ -329,7 +347,7 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
 <h3>최종 전략: 용도별 분리</h3>
 
 <div class="flow">
-  <div class="step"><strong>저장 경로</strong><br>에이전트 데이터 → 적응형 코드북 또는 스칼라 8-bit → .dat2 저장<br><span style="color:var(--muted)">4~6x 압축, 오차 &lt;1%</span></div>
+  <div class="step"><strong>저장 경로</strong><br>에이전트 데이터 → 맞춤 눈금(적응형 코드북) 5~8-bit → .dat2 저장<br><span style="color:var(--muted)">4~6x 압축, 오차 &lt;1%, 메트릭별 대표값 미리 학습</span></div>
   <div class="arrow">↓ 동시에</div>
   <div class="step"><strong>분석 경로 (메모리)</strong><br>.dat2 복원값 → 그룹 회전 TurboQuant 압축 → 메모리 인덱스<br><span style="color:var(--muted)">248B/벡터, 유사도 검색 & 이상 탐지</span></div>
 </div>
@@ -347,7 +365,7 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
 <h4 style="color:var(--red)">❌ TurboQuant 적용 불가</h4>
 <table>
 <tr><th>데이터</th><th>이유</th><th>대안</th></tr>
-<tr><td><strong>TagCount .dat2 (값 저장)</strong></td><td>저차원(5), 개별 값 정확도 필요</td><td>적응형 코드북 / 스칼라 8-bit</td></tr>
+<tr><td><strong>TagCount .dat2 (값 저장)</strong></td><td>저차원(5), 개별 값 정확도 필요</td><td>맞춤 눈금(적응형 코드북) 또는 스칼라 8-bit</td></tr>
 <tr><td><strong>텍스트/인덱스/로그</strong></td><td>숫자가 아님</td><td>LZ4, Zstd 등</td></tr>
 <tr><td><strong>타임스탬프</strong></td><td>정확해야 함</td><td>delta encoding</td></tr>
 </table>
