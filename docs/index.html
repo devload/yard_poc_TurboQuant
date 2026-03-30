@@ -75,6 +75,7 @@ footer a{color:var(--accent);text-decoration:none}
   <a href="#ch4">Ch.4 전환점</a>
   <a href="#ch5">Ch.5 그룹 회전</a>
   <a href="#ch6">Ch.6 결론</a>
+  <a href="#ch7">Ch.7 실증</a>
 </nav>
 
 <!-- Hero -->
@@ -561,6 +562,95 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
   <div class="stat orange"><div class="num">289ns</div><div class="label">복원 속도 (레코드당)</div></div>
   <div class="stat green"><div class="num">6.4x</div><div class="label">적응형 5-bit 압축률</div></div>
 </div>
+
+</chapter>
+
+<!-- Ch.7 실증 결과 -->
+<chapter id="ch7">
+<h2>Ch.7 &mdash; 실증: 실제로 만들어보니</h2>
+
+<p>말만 하지 말고 진짜 돌아가는 코드를 만들었다. 3가지 적용 가능 데이터에 대해 TurboQuant 벡터 검색을 구현하고 시뮬레이션 데이터로 검증했다.</p>
+
+<h3>히트맵 패턴 검색 (Phase 8)</h3>
+
+<div class="stats">
+  <div class="stat blue"><div class="num">120</div><div class="label">차원 (응답시간 버킷)</div></div>
+  <div class="stat green"><div class="num">7.5x</div><div class="label">압축률 (480B→64B)</div></div>
+  <div class="stat green"><div class="num">1.7ms</div><div class="label">검색 시간</div></div>
+  <div class="stat green"><div class="num">0.006</div><div class="label">이상 히트맵 유사도 (정상 0.97)</div></div>
+</div>
+
+<p>정상 히트맵 20개(응답시간 0~2초 집중)를 베이스라인으로 넣고, 이상 히트맵 1개(응답시간 5~10초 급증)를 넣었더니 <strong>유사도 0.006</strong>으로 즉시 감지. 정상끼리는 유사도 0.97.</p>
+
+<div class="analogy green">
+  <span class="label">의미</span>
+  "지금 히트맵 모양이 평소와 완전히 다릅니다" → 이걸 <strong>숫자 하나(0.006)로 판별</strong>할 수 있다.
+  기존에는 사람이 히트맵 차트를 눈으로 보고 "어, 이상한데?" 하던 것을 자동화할 수 있다.
+</div>
+
+<h3>서버 카운터 그룹 회전 검색 (Phase 9)</h3>
+
+<div class="stats">
+  <div class="stat blue"><div class="num">7+8+7</div><div class="label">그룹별 차원 (22 메트릭)</div></div>
+  <div class="stat green"><div class="num">34B</div><div class="label">서버 상태 1건 압축 크기</div></div>
+  <div class="stat green"><div class="num">5/5</div><div class="label">클러스터 정확도 (100%)</div></div>
+  <div class="stat blue"><div class="num">4.4ms</div><div class="label">1200개 벡터 검색 시간</div></div>
+</div>
+
+<p>웹서버 5대, DB서버 3대, 배치서버 2대를 시뮬레이션하고 10분간 데이터를 생성했다. "웹서버 1001과 비슷한 서버"를 검색했더니 <strong>Top-5 전부 웹서버</strong>가 나왔다.</p>
+
+<table>
+  <tr><th>순위</th><th>서버</th><th>유사도</th><th>퍼센트 그룹</th><th>카운트 그룹</th><th>시간 그룹</th></tr>
+  <tr><td>#1</td><td>1001 (web)</td><td><strong>0.9965</strong></td><td>0.9895</td><td>1.0000</td><td>1.0000</td></tr>
+  <tr><td>#2</td><td>1003 (web)</td><td><strong>0.9519</strong></td><td>0.9155</td><td>0.9767</td><td>0.9633</td></tr>
+  <tr><td>#3</td><td>1003 (web)</td><td><strong>0.9101</strong></td><td>0.9404</td><td>0.8597</td><td>0.9302</td></tr>
+  <tr><td>#4</td><td>1004 (web)</td><td><strong>0.9077</strong></td><td>0.9151</td><td>0.8884</td><td>0.9197</td></tr>
+  <tr><td>#5</td><td>1003 (web)</td><td><strong>0.9034</strong></td><td>0.8727</td><td>0.8852</td><td>0.9521</td></tr>
+</table>
+
+<div class="analogy blue">
+  <span class="label">그룹 회전의 효과</span>
+  CPU/메모리/디스크(퍼센트 그룹)의 <strong>복원 오차가 0.02~0.86%</strong>로 매우 정확하다.
+  같은 스케일끼리만 회전하니까 값 섞임 없이 TurboQuant의 오차 분산 효과만 누릴 수 있었다.<br><br>
+  반면 카운트/시간 그룹은 오차가 높은 항목(gc_count 18%, service_time 28%)이 있다.
+  이건 중심값과 범위를 실데이터에 맞게 더 튜닝하면 해결된다.
+</div>
+
+<h3>퍼센타일 분포 검색 (Phase 10)</h3>
+
+<div class="stats">
+  <div class="stat blue"><div class="num">14</div><div class="label">차원 (P10~P99.9)</div></div>
+  <div class="stat green"><div class="num">11B</div><div class="label">분포 1건 압축 크기</div></div>
+  <div class="stat green"><div class="num">1.00</div><div class="label">같은 유형 URL 유사도</div></div>
+  <div class="stat blue"><div class="num">0.7ms</div><div class="label">288개 벡터 검색 시간</div></div>
+</div>
+
+<p>빠른 API(5ms), 보통 API(100ms), 느린 API(2000ms), DB의존 API(500ms, long-tail) 4종류 × 3개 URL을 시뮬레이션. "/api/users와 비슷한 URL"을 검색했더니 <strong>같은 "보통" 그룹만 나옴</strong>. 유사도 1.0.</p>
+
+<div class="analogy green">
+  <span class="label">의미</span>
+  "/api/users가 느려졌는데, 같은 패턴의 다른 URL도 느려졌나?" →
+  <strong>0.7ms만에 확인</strong>할 수 있다.
+  같은 DB를 쓰는 API들이 함께 느려지는 걸 자동으로 잡아낼 수 있다.
+</div>
+
+<h3>정리: 3가지 적용 결과</h3>
+
+<table>
+  <tr><th>대상</th><th>차원</th><th>압축</th><th>검색</th><th>클러스터 정확도</th><th>이상 탐지</th></tr>
+  <tr>
+    <td><strong>히트맵</strong></td><td>120</td><td>7.5x</td><td>1.7ms</td>
+    <td>-</td><td style="color:var(--green)"><strong>정상 0.97 vs 이상 0.006</strong></td>
+  </tr>
+  <tr>
+    <td><strong>서버 카운터</strong></td><td>22 (3그룹)</td><td>34B/건</td><td>4.4ms</td>
+    <td style="color:var(--green)"><strong>100% (5/5)</strong></td><td>퍼센트 그룹 우수</td>
+  </tr>
+  <tr>
+    <td><strong>퍼센타일</strong></td><td>14</td><td>11B/건</td><td>0.7ms</td>
+    <td style="color:var(--green)"><strong>같은 유형만 검색됨</strong></td><td>튜닝 필요</td>
+  </tr>
+</table>
 
 </chapter>
 </div>
