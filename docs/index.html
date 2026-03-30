@@ -267,10 +267,18 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
 <chapter id="ch5">
 <h2>Ch.5 &mdash; 결과: 그룹 회전이 답이었다</h2>
 
-<h3>실측 결과: 7개 메트릭, 4-bit</h3>
+<h3>실측 결과: 7개 메트릭의 상대오차 비교</h3>
+
+<p>같은 데이터(10,000샘플)를 4가지 방식으로 압축한 뒤, 복원값이 원본과 얼마나 다른지를 <strong>상대오차(%)</strong>로 측정했다. 낮을수록 원본에 가깝다.</p>
 
 <table>
-<tr><th>메트릭</th><th>전체 회전</th><th>그룹 회전</th><th>그룹+중심+정규화</th><th>그룹+중심 8-bit</th></tr>
+<tr>
+  <th>메트릭</th>
+  <th>전체 회전 4-bit<br><span style="font-weight:400;text-transform:none">7개를 한 번에 돌림</span></th>
+  <th>그룹 회전 4-bit<br><span style="font-weight:400;text-transform:none">비슷한 범위끼리 나눠 돌림</span></th>
+  <th>그룹+중심+정규화 4-bit<br><span style="font-weight:400;text-transform:none">+평균 빼기+스케일 맞추기</span></th>
+  <th>그룹+중심+정규화 8-bit<br><span style="font-weight:400;text-transform:none">코드북을 256개로 늘림</span></th>
+</tr>
 <tr><td>CPU %</td><td style="color:var(--red)">223%</td><td>9.3%</td><td style="color:var(--green)"><strong>2.4%</strong></td><td style="color:var(--green)"><strong>0.35%</strong></td></tr>
 <tr><td>Mem %</td><td style="color:var(--red)">104%</td><td>10.5%</td><td style="color:var(--green)"><strong>1.6%</strong></td><td style="color:var(--green)"><strong>0.19%</strong></td></tr>
 <tr><td>TPS</td><td style="color:var(--red)">35%</td><td>44.6%</td><td style="color:var(--green)"><strong>5.8%</strong></td><td style="color:var(--green)"><strong>0.25%</strong></td></tr>
@@ -278,6 +286,13 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
 <tr><td>GC</td><td style="color:var(--red)">811%</td><td>4.5%</td><td style="color:var(--green)"><strong>6.3%</strong></td><td style="color:var(--green)"><strong>0.27%</strong></td></tr>
 <tr><td>Error</td><td style="color:var(--red)">1659%</td><td>11.0%</td><td style="color:var(--green)"><strong>6.6%</strong></td><td style="color:var(--green)"><strong>0.36%</strong></td></tr>
 </table>
+
+<div class="analogy blue">
+  <span class="label">표 읽는 법</span>
+  CPU % 행의 "223%"는 <strong>원본 대비 복원값이 평균 223% 벗어남</strong>을 뜻한다.<br>
+  예: 원본 50% → 복원값이 50±111.5 범위 → 대시보드에 -61%~161%로 표시될 수 있다.<br><br>
+  "0.35%"는 원본 50% → 복원값 49.8~50.2 → <strong>대시보드에서 구분 불가능</strong>.
+</div>
 
 <div class="highlight-box">
   <strong>전체 회전 → 그룹+중심+정규화+8-bit</strong><br>
