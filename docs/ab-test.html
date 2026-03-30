@@ -65,6 +65,7 @@ footer a{color:var(--accent);text-decoration:none}
   <a href="#detect">이상 탐지</a>
   <a href="#log">로그 분석</a>
   <a href="#pipeline">파이프라인</a>
+  <a href="#rca">원인 분석</a>
 </nav>
 
 <div class="hero">
@@ -340,6 +341,142 @@ java -cp "tq-daemon.jar:tq-common.jar" TqiServerDaemon
   ✅ 1,524건 이상을 코사인 유사도로 자동 판정<br>
   ✅ 에러 0, Broken pipe 0, 대시보드 정상
 </div>
+</chapter>
+
+<!-- 원인 분석 -->
+<chapter id="rca">
+<h2>이상 감지 → 원인 분석</h2>
+
+<p>이상을 감지하는 것만으로는 부족합니다. <strong>"왜 이상한가?"</strong>까지 자동으로 따라가야 합니다.</p>
+
+<h3>분석 흐름: 5단계 드릴다운</h3>
+
+<div class="flow">
+  <div class="step bad"><strong>1. 이상 감지</strong><br><small>TQI 데몬: 코사인 유사도 0.77 → "패턴이 바뀌었다"</small></div>
+  <div class="arrow">↓ 같은 시간에 다른 인덱스도 이상한가?</div>
+  <div class="step"><strong>2. 동시 이벤트 수집</strong><br><small>±5분 윈도우로 다른 .dat2 카테고리 스캔<br>app_counter + app_host_resource + app_proc_counter</small></div>
+  <div class="arrow">↓ 공통으로 벗어난 메트릭은?</div>
+  <div class="step"><strong>3. 공통 메트릭 분석</strong><br><small>여러 서버에서 동시에 sql_time +121%, resp_time +98%<br>→ "SQL이 느려지면서 응답시간이 올라갔다"</small></div>
+  <div class="arrow">↓ 왜 그 메트릭이 올라갔나?</div>
+  <div class="step"><strong>4. 서버 상세 확인</strong><br><small>DB 커넥션 풀 96% 포화, 대기 12건<br>힙 메모리 88%, 디스크 I/O 45%</small></div>
+  <div class="arrow">↓ 어떤 쿼리/URL이 원인인가?</div>
+  <div class="step good"><strong>★ 5. 근본 원인</strong><br><small>SELECT * FROM orders WHERE... (200ms → 8500ms, 43배)<br>/api/order 150ms→4200ms, /api/payment 200ms→3800ms</small></div>
+</div>
+
+<h3>실제 로그에서 원인 분석하기</h3>
+
+<h4>Step 1: 이상 로그에서 시작</h4>
+<pre><code>⚠ 이상 #5 [13:32:31] tqi#206 유사도=0.6961
+  유사: tqi#156 (0.9967)
+
+→ "tqi#206 시점에 뭔가 바뀌었다"
+→ "tqi#156과 패턴이 비슷하다 = 과거에도 같은 이상이 있었다"</code></pre>
+
+<h4>Step 2: 같은 시간대의 다른 .dat2 확인</h4>
+<pre><code># B 서버에서 같은 시간대(13:32)의 다른 카테고리 확인
+grep "13:32" /data/whatap-server/logs/tq-daemon.log
+
+# 또는 직접 .dat2를 파싱하여 같은 시간의 메트릭 비교
+# app_counter.dat2   → CPU, TPS, GC, 응답시간
+# app_host_resource.dat2 → 메모리, 디스크
+# app_proc_counter.dat2  → 프로세스별 리소스</code></pre>
+
+<h4>Step 3: 어떤 메트릭이 벗어났는지</h4>
+<pre><code># TQ 디코딩 후 float 값 비교
+베이스라인:  [cpu=40, tps=300, sql_time=50,  resp=200, gc=5,  mem=65, ...]
+이상 시점:   [cpu=42, tps=800, sql_time=130, resp=950, gc=15, mem=68, ...]
+                      ↑↑↑        ↑↑↑          ↑↑↑      ↑↑
+
+공통 편차: tps +167%, sql_time +160%, resp_time +375%, gc +200%
+→ 패턴: sql_time↑ + resp_time↑ = "DB 쿼리 지연 → 응답시간 증가"</code></pre>
+
+<h4>Step 4: 원인 추정 규칙</h4>
+<table>
+  <tr><th>공통 메트릭 패턴</th><th>추정 원인</th></tr>
+  <tr><td>sql_time ↑ + resp_time ↑</td><td>DB 쿼리 지연</td></tr>
+  <tr><td>httpc_time ↑ + resp_time ↑</td><td>외부 API 지연</td></tr>
+  <tr><td>heap_use ↑ + gc_count ↑ + gc_time ↑</td><td>메모리 부족 / GC 빈발</td></tr>
+  <tr><td>cpu ↑ (sql 정상)</td><td>CPU 과부하</td></tr>
+  <tr><td>다수 메트릭 동시 급등</td><td>트래픽 폭증 또는 에이전트 추가</td></tr>
+</table>
+
+<h4>Step 5: 근본 원인까지</h4>
+<pre><code># YARD의 기존 데이터로 심층 추적
+# (StatGeneralPack에서 슬로우 쿼리 확인)
+
+SQL [0xAB3F]: 200ms → 8500ms (43배 느려짐, 342건)
+  "SELECT * FROM orders WHERE created_at > ? AND status IN (?, ?)"
+
+영향 URL:
+  /api/order:   150ms → 4200ms (28배)
+  /api/payment: 200ms → 3800ms (19배)
+
+★ 근본 원인: 특정 쿼리의 실행 계획 변경 또는 인덱스 미스</code></pre>
+
+<h3>원인 체인 예시: 3가지 시나리오</h3>
+
+<div class="box red">
+  <span class="label">시나리오 1: DB 커넥션 풀 고갈</span>
+  → [감지] TQI 유사도 0.77<br>
+  → [메트릭] sql_time +121%, resp_time +98%<br>
+  → [서버] DB 풀 96% 포화, 대기 12건<br>
+  → <strong>★ SELECT * FROM orders... (200ms→8500ms, 43배)</strong>
+</div>
+
+<div class="box orange">
+  <span class="label">시나리오 2: 외부 API 장애</span>
+  → [감지] TQI 유사도 0.69<br>
+  → [메트릭] httpc_time +190%, resp_time +92%<br>
+  → [서버] 스레드 풀 92%<br>
+  → <strong>★ /api/payment 180ms→12000ms (외부 결제 API 타임아웃)</strong>
+</div>
+
+<div class="box purple">
+  <span class="label">시나리오 3: 메모리 릭</span>
+  → [감지] TQI 유사도 점진적 하락 (0.95→0.80→0.65)<br>
+  → [메트릭] heap_use +58%, gc_count +72%, gc_time +118%<br>
+  → [서버] 힙 94%, GC에 CPU 38%<br>
+  → <strong>★ 메모리 릭으로 모든 URL 느려짐</strong>
+</div>
+
+<div class="box blue">
+  <span class="label">핵심</span>
+  TQI 벡터 인덱스는 <strong>"뭔가 이상하다"를 빠르게 감지</strong>하는 역할이고,<br>
+  YARD의 기존 데이터(카운터, 슬로우 쿼리, 프로필)가 <strong>"왜 이상한가"를 설명</strong>하는 역할입니다.<br><br>
+  <strong>감지(TQI) + 분석(YARD 기존 데이터)</strong>를 시간으로 연결하면,<br>
+  이상 발생부터 근본 원인까지 자동으로 추적할 수 있습니다.
+</div>
+
+<h3>자동 분석 코드 (RootCauseAnalyzer)</h3>
+
+<p>PoC에 포함된 <code>RootCauseAnalyzer</code>와 <code>DeepDrillDown</code>이 이 과정을 자동화합니다.</p>
+
+<pre><code>// 이상 이벤트 수집
+List&lt;AnomalyEvent&gt; events = collectFromAllIndexes(timeWindow);
+
+// 시간으로 묶기
+List&lt;IncidentGroup&gt; groups = analyzer.correlate(events);
+
+// 심층 분석
+for (IncidentGroup group : groups) {
+    DrillDownReport report = DeepDrillDown.analyze(
+        group,
+        serverDetailProvider,  // DB 풀, 힙, GC 상세
+        queryStatsProvider     // 슬로우 쿼리, 영향 URL
+    );
+
+    // 원인 체인 출력
+    for (CauseChainStep step : report.causeChain) {
+        log("[%s] %s", step.level, step.description);
+    }
+    // → [증상] 히트맵 분포 이상
+    // → [전파] 서버 3대 sql_time +121%
+    // → [원인] DB 풀 96% 포화
+    // → ★ [근본원인] SELECT * FROM orders... 43배 느려짐
+}</code></pre>
+
+<p>소스: <a href="https://github.com/devload/yard_poc_TurboQuant/tree/main/turboquant-hitmap/src/main/java/io/whatap/turboquant/hitmap/correlate">turboquant-hitmap/correlate/</a></p>
+
 </chapter>
 
 </div>
