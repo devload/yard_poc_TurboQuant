@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TurboQuant x WhaTap YARD 적용 분석 보고서</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a;
+    --text: #e4e4e7; --muted: #9ca3af;
+    --accent: #6366f1; --accent2: #8b5cf6;
+    --green: #22c55e; --red: #ef4444; --yellow: #eab308; --blue: #3b82f6; --cyan: #06b6d4;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:var(--bg); color:var(--text); line-height:1.7; }
+  .container { max-width:1400px; margin:0 auto; padding:2rem 3rem; }
+  .header { text-align:center; padding:3rem 0 2rem; border-bottom:1px solid var(--border); margin-bottom:2rem; }
+  .header h1 { font-size:2.5rem; background:linear-gradient(135deg,var(--accent),var(--cyan)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:0.5rem; }
+  .header .sub { color:var(--muted); font-size:1rem; }
+  .header .meta { color:var(--muted); font-size:0.85rem; margin-top:0.5rem; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:2rem 2.5rem; margin-bottom:1.5rem; }
+  .card h2 { font-size:1.4rem; margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem; }
+  .card h3 { font-size:1.05rem; color:var(--muted); margin:1.5rem 0 0.5rem; }
+  .card h4 { font-size:0.95rem; color:var(--accent); margin:1rem 0 0.5rem; }
+  table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+  th,td { padding:0.8rem 1.2rem; text-align:left; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr:hover td { background:rgba(99,102,241,0.04); }
+  .badge { display:inline-block; padding:0.15rem 0.5rem; border-radius:4px; font-size:0.75rem; font-weight:600; }
+  .badge-green { background:rgba(34,197,94,0.15); color:var(--green); }
+  .badge-red { background:rgba(239,68,68,0.15); color:var(--red); }
+  .badge-yellow { background:rgba(234,179,8,0.15); color:var(--yellow); }
+  .badge-blue { background:rgba(59,130,246,0.15); color:var(--blue); }
+  .badge-purple { background:rgba(139,92,246,0.15); color:var(--accent2); }
+  .badge-cyan { background:rgba(6,182,212,0.15); color:var(--cyan); }
+  .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin:1.5rem 0; }
+  .chart-box { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem 2rem; }
+  .chart-box h4 { font-size:0.95rem; color:var(--muted); margin-bottom:1rem; }
+  canvas { max-height:320px; }
+  .kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+  .kpi { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; text-align:center; }
+  .kpi .value { font-size:2.2rem; font-weight:700; line-height:1.2; }
+  .kpi .label { color:var(--muted); font-size:0.8rem; margin-top:0.3rem; }
+  .kpi.green .value { color:var(--green); } .kpi.red .value { color:var(--red); }
+  .kpi.blue .value { color:var(--blue); } .kpi.purple .value { color:var(--accent2); }
+  .kpi.cyan .value { color:var(--cyan); } .kpi.yellow .value { color:var(--yellow); }
+  .insight { background:rgba(99,102,241,0.06); border-left:3px solid var(--accent); padding:1rem 1.2rem; border-radius:0 8px 8px 0; margin:0.5rem 0 1rem; font-size:0.9rem; color:var(--muted); }
+  .insight.warn { background:rgba(234,179,8,0.06); border-left-color:var(--yellow); }
+  .insight.good { background:rgba(34,197,94,0.06); border-left-color:var(--green); }
+  .insight.bad { background:rgba(239,68,68,0.06); border-left-color:var(--red); }
+  .tag { display:inline-block; padding:0.2rem 0.6rem; border-radius:6px; font-size:0.75rem; font-weight:700; margin-right:0.4rem; }
+  .tag-ch { background:rgba(99,102,241,0.2); color:var(--accent); }
+  .toc { padding:1rem 0; }
+  .toc a { color:var(--accent); text-decoration:none; font-size:0.9rem; }
+  .toc a:hover { text-decoration:underline; }
+  .toc ol { padding-left:1.5rem; }
+  .toc li { margin:0.3rem 0; }
+  .footer { text-align:center; padding:2rem 0; color:var(--muted); font-size:0.8rem; border-top:1px solid var(--border); margin-top:2rem; }
+  @media(max-width:768px) { .chart-row{grid-template-columns:1fr;} .container{padding:1rem;} }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="header">
+  <h1>TurboQuant x WhaTap YARD</h1>
+  <div class="sub">적용 분석 보고서 &mdash; 어디에 쓸 수 있고, 어디에 쓸 수 없는가</div>
+  <div class="meta">2026-03-30 | <a href="https://github.com/whatap/yard_poc_TurboQuant" style="color:var(--accent)">whatap/yard_poc_TurboQuant</a> | 기반: Google TurboQuant (ICLR 2026)</div>
+</div>
+
+<!-- 목차 -->
+<div class="card">
+  <h2>목차</h2>
+  <div class="toc">
+    <ol>
+      <li><a href="#ch1">TurboQuant란 무엇인가</a></li>
+      <li><a href="#ch2">WhaTap YARD 데이터 구조</a></li>
+      <li><a href="#ch3">YARD 데이터 분류: 적용 가능 vs 불가능</a></li>
+      <li><a href="#ch4">PoC 결과: 6단계 검증</a></li>
+      <li><a href="#ch5">핵심 발견: 왜 저장 압축에는 안 맞는가</a></li>
+      <li><a href="#ch6">튜닝 시도와 한계</a></li>
+      <li><a href="#ch7">실제 데이터 분석</a></li>
+      <li><a href="#ch8">최종 적용 전략</a></li>
+      <li><a href="#ch9">다음 단계</a></li>
+    </ol>
+  </div>
+</div>
+
+<!-- CH1: TurboQuant란 -->
+<div class="card" id="ch1">
+  <h2><span class="tag tag-ch">CH.1</span> TurboQuant란 무엇인가</h2>
+
+  <p>Google Research가 ICLR 2026에서 발표한 <strong>벡터 양자화(Vector Quantization)</strong> 알고리즘입니다.
+  원래 목적은 LLM의 Key-Value Cache를 3~4비트로 압축하여 GPU 메모리를 6~8배 절약하는 것입니다.</p>
+
+  <h3>알고리즘 핵심 (2단계)</h3>
+  <table>
+    <tr><th>단계</th><th>연산</th><th>목적</th></tr>
+    <tr><td><span class="badge badge-purple">1단계</span></td><td>랜덤 직교 회전(QR 분해) + Lloyd-Max 최적 양자화</td><td>벡터 좌표를 Beta 분포로 변환 후 MSE-최적 코드북으로 양자화</td></tr>
+    <tr><td><span class="badge badge-blue">2단계</span></td><td>QJL 1-bit 잔차 프로젝션</td><td>양자화 잔차의 부호만 저장하여 내적(inner product) 편향 보정</td></tr>
+  </table>
+
+  <h3>TurboQuant가 잘하는 것</h3>
+  <div class="insight good">
+    <strong>고차원 벡터(수백~수천 차원)의 내적을 보존</strong>하면서 극단적으로 압축합니다.
+    개별 값이 약간 틀려도, 벡터 간 유사도(내적/코사인)는 정확하게 유지됩니다.
+    이것이 LLM의 Attention Score를 보존하는 핵심 원리입니다.
+  </div>
+
+  <h3>TurboQuant가 못하는 것</h3>
+  <div class="insight bad">
+    <strong>개별 값의 정확한 복원</strong>은 보장하지 않습니다.
+    랜덤 회전 행렬이 값을 "섞기" 때문에, 입력 52.7이 복원 시 36.8이 될 수 있습니다.
+    차원이 낮을수록(5~20) 이 문제가 심각해집니다.
+  </div>
+
+  <h3>AI에서는 왜 스칼라 8-bit 대신 TurboQuant를 쓰는가?</h3>
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>스칼라 8-bit의 문제 (AI)</h4>
+      <p style="color:var(--muted);font-size:0.85rem;">4096차원 벡터에서 각 원소에 ±0.2% 오차가 있으면,
+      내적 계산 시 4096개 오차가 누적됩니다.<br><br>
+      <code>내적 오차 ≈ 개별오차 × √4096 ≈ 64배 증폭</code><br><br>
+      TurboQuant는 <strong>회전으로 오차를 균등 분배</strong>하고 <strong>QJL로 내적 편향을 보정</strong>하여
+      이 누적 문제를 해결합니다.</p>
+    </div>
+    <div class="chart-box">
+      <h4>모니터링에서는?</h4>
+      <p style="color:var(--muted);font-size:0.85rem;">모니터링 데이터는 <strong>내적이 아니라 개별 값을 읽습니다.</strong><br><br>
+      "CPU가 몇 %인가?" → 정확한 값 필요<br>
+      "이 서버와 비슷한 패턴의 서버는?" → 내적/유사도 필요<br><br>
+      <strong>용도에 따라 다른 방법이 필요합니다.</strong><br>
+      값 저장 → 스칼라 8-bit<br>
+      패턴 비교 → TurboQuant</p>
+    </div>
+  </div>
+</div>
+
+<!-- CH2: YARD 데이터 구조 -->
+<div class="card" id="ch2">
+  <h2><span class="tag tag-ch">CH.2</span> WhaTap YARD 데이터 구조</h2>
+
+  <h3>YARD란?</h3>
+  <p>WhaTap 모니터링 플랫폼의 <strong>핵심 데이터 수집/저장 서버</strong>입니다.
+  에이전트로부터 메트릭, 트레이스, 로그를 TCP(포트 6610)로 수신하여 yardbase(시계열 DB)에 저장하고,
+  Front/API(포트 7710)를 통해 대시보드에 제공합니다.</p>
+
+  <h3>yardbase 디렉토리 구조</h3>
+  <div style="background:var(--bg);border-radius:8px;padding:1.2rem;margin:0.5rem 0;font-family:monospace;font-size:0.85rem;overflow-x:auto;line-height:1.8;">
+<span style="color:var(--cyan)">yardbase/</span>
+├── <span style="color:var(--accent)">{pcode}/</span>                          <span style="color:var(--muted)">← 프로젝트별</span>
+│   ├── <span style="color:var(--accent)">{YYYYMMDD}/</span>                   <span style="color:var(--muted)">← 일별</span>
+│   │   ├── <span style="color:var(--accent)">{HH}/</span>                     <span style="color:var(--muted)">← 시간별</span>
+│   │   │   ├── <span style="color:var(--yellow)">tagc/</span>                 <span style="color:var(--muted)">← 차원별 메트릭 (TagCountPack)</span>
+│   │   │   │   ├── *.dat                    <span style="color:var(--muted)">← 메인 팩 (헤더+인덱스)</span>
+│   │   │   │   ├── <span style="color:var(--red)">*.dat2</span>               <span style="color:var(--muted)">← <strong>field 데이터 (MetricValue) — 압축 대상</strong></span>
+│   │   │   │   ├── *.dat3                   <span style="color:var(--muted)">← tag 데이터 (문자열)</span>
+│   │   │   │   ├── *.tim                    <span style="color:var(--muted)">← 시간 인덱스 (위치 포인터)</span>
+│   │   │   │   ├── *.tags                   <span style="color:var(--muted)">← 태그 메타데이터</span>
+│   │   │   │   └── *.tdata                  <span style="color:var(--muted)">← 시계열 데이터</span>
+│   │   │   ├── <span style="color:var(--green)">db3/</span>                  <span style="color:var(--muted)">← 통계 집계 (StatGeneralPack)</span>
+│   │   │   ├── <span style="color:var(--blue)">db3tx/</span>                <span style="color:var(--muted)">← 히트맵 + 프로필 (HitMapPack)</span>
+│   │   │   └── hvtxt/                       <span style="color:var(--muted)">← 텍스트 해시 (URL, SQL 등)</span>
+│   │   └── meta-inf/
+│   └── 20000101/                            <span style="color:var(--muted)">← config, kvdb, longTerm</span>
+└── <span style="color:var(--accent2)">logsink1/</span>                         <span style="color:var(--muted)">← 구조화 로그</span>
+    ├── BrowserError.whatap
+    ├── WebVitals_v2.whatap
+    ├── PerformanceEvent.whatap
+    ├── Crash.whatap
+    └── Screen_loading.whatap
+  </div>
+
+  <h3>주요 데이터 팩 유형</h3>
+  <table>
+    <tr><th>팩</th><th>저장 위치</th><th>내용</th><th>차원</th><th>데이터 형태</th></tr>
+    <tr><td><strong>HitMapPack1</strong></td><td>db3tx/</td><td>응답시간 분포 히스토그램</td><td class="num"><strong>120</strong></td><td>int[120] (동일 스케일)</td></tr>
+    <tr><td><strong>HitMapRumPack</strong></td><td>db3tx/</td><td>RUM 페이지 로드 분포</td><td class="num"><strong>120</strong></td><td>int[120] (동일 스케일)</td></tr>
+    <tr><td><strong>CounterPack</strong></td><td>캐시/큐브</td><td>서버 상태 (CPU,메모리,TPS...)</td><td class="num"><strong>78</strong></td><td>float/int 혼합</td></tr>
+    <tr><td><strong>TagCountPack</strong></td><td>tagc/*.dat2</td><td>차원별 메트릭 (MetricValue)</td><td class="num">5</td><td>count,sum,min,max,last</td></tr>
+    <tr><td><strong>StatGeneralPack</strong></td><td>db3/</td><td>통계 집계 테이블</td><td class="num">가변</td><td>AnyList 컬럼</td></tr>
+    <tr><td><strong>KLL Quantile</strong></td><td>큐브</td><td>응답시간 퍼센타일 스케치</td><td class="num">50~100</td><td>sorted float[]</td></tr>
+    <tr><td><strong>ActiveStackPack</strong></td><td>캐시</td><td>활성 호출 스택</td><td class="num">가변</td><td>int[] 해시 시퀀스</td></tr>
+    <tr><td><strong>ProfilePack</strong></td><td>db3tx/</td><td>트랜잭션 프로필 스텝</td><td class="num">가변</td><td>byte[] 바이너리</td></tr>
+    <tr><td><strong>LogSinkPack</strong></td><td>logsink1/</td><td>구조화 로그</td><td class="num">3~8</td><td>tags(문자열) + fields(숫자)</td></tr>
+  </table>
+</div>
+
+<!-- CH3: 적용 가능 vs 불가능 -->
+<div class="card" id="ch3">
+  <h2><span class="tag tag-ch">CH.3</span> YARD 데이터 분류: 적용 가능 vs 불가능</h2>
+
+  <h3>TurboQuant 적용 가능</h3>
+  <table>
+    <tr><th>데이터</th><th>차원</th><th>스케일</th><th>적용 방식</th><th>기대 효과</th></tr>
+    <tr style="background:rgba(34,197,94,0.05);">
+      <td><span class="badge badge-green">최적</span> <strong>히트맵 (HitMapPack1)</strong></td>
+      <td class="num">120</td><td>동일 (count)</td>
+      <td>분포 벡터 직접 양자화</td>
+      <td>히트맵 패턴 비교, 과거 유사 시점 검색, 분포 이상 탐지</td>
+    </tr>
+    <tr style="background:rgba(34,197,94,0.05);">
+      <td><span class="badge badge-green">최적</span> <strong>RUM 히트맵 (HitMapRumPack)</strong></td>
+      <td class="num">120</td><td>동일 (count)</td>
+      <td>동일</td>
+      <td>페이지 로드 분포 비교, 브라우저별 패턴 차이 감지</td>
+    </tr>
+    <tr style="background:rgba(59,130,246,0.05);">
+      <td><span class="badge badge-blue">적합</span> <strong>CounterPack (서버 상태)</strong></td>
+      <td class="num">78</td><td>혼합 (정규화 필요)</td>
+      <td>z-score 정규화 후 벡터화</td>
+      <td>서버 패턴 유사도 검색, 복합 메트릭 이상 탐지</td>
+    </tr>
+    <tr style="background:rgba(59,130,246,0.05);">
+      <td><span class="badge badge-blue">적합</span> <strong>KLL Quantile</strong></td>
+      <td class="num">50~100</td><td>동일 (ms)</td>
+      <td>퍼센타일 분포 벡터화</td>
+      <td>"이 URL과 응답 분포가 비슷한 URL" 검색</td>
+    </tr>
+    <tr style="background:rgba(139,92,246,0.05);">
+      <td><span class="badge badge-purple">가능</span> <strong>StatGeneralPack</strong></td>
+      <td class="num">가변</td><td>혼합</td>
+      <td>행 단위 정규화 + 벡터화</td>
+      <td>유사 URL/SQL 자동 그룹핑</td>
+    </tr>
+    <tr style="background:rgba(139,92,246,0.05);">
+      <td><span class="badge badge-purple">가능</span> <strong>ActiveStackPack</strong></td>
+      <td class="num">가변</td><td>동일 (hash)</td>
+      <td>해시 시퀀스 임베딩</td>
+      <td>유사 호출 스택 클러스터링</td>
+    </tr>
+  </table>
+
+  <h3>TurboQuant 적용 불가능</h3>
+  <table>
+    <tr><th>데이터</th><th>차원</th><th>불가 사유</th><th>대안</th></tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>TagCount .dat2 (MetricValue)</strong></td>
+      <td class="num">5</td>
+      <td>저차원 + 이종 스케일 → 회전이 값을 섞어 오차 20%+</td>
+      <td>스칼라 8-bit (오차 0.2%, 4x 압축)</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>TagCount .dat3 (태그 텍스트)</strong></td>
+      <td class="num">-</td><td>문자열 데이터, 숫자가 아님</td><td>해시/사전 압축</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>hvtxt (URL/SQL 텍스트)</strong></td>
+      <td class="num">-</td><td>해시→텍스트 매핑, 양자화 대상 아님</td><td>LZ4/Zstd</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>타임스탬프 (Decimal)</strong></td>
+      <td class="num">1</td><td>epoch ms 단일값, 벡터가 아님</td><td>delta encoding</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>ProfilePack (byte[] steps)</strong></td>
+      <td class="num">가변</td><td>바이너리 시퀀스, 직접 양자화 불가</td><td>Step 임베딩 선행 필요</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>.tim / .tags / .dat (인덱스)</strong></td>
+      <td class="num">-</td><td>위치 포인터/메타데이터, 정확해야 함</td><td>변경 불가</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>logsink (로그 본문)</strong></td>
+      <td class="num">-</td><td>문자열 로그</td><td>Zstd 압축</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>logsink fields (숫자 필드)</strong></td>
+      <td class="num">3~8</td><td>저차원 (screenWidth, value 등)</td><td>스칼라 8-bit</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>정수 전용 필드 (count=1)</strong></td>
+      <td class="num">1</td><td>이미 정확한 정수, 양자화하면 손해</td><td>그대로 유지</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">부적합</span> <strong>config / kvdb</strong></td>
+      <td class="num">-</td><td>설정 데이터</td><td>변경 불가</td>
+    </tr>
+  </table>
+
+  <h3>판단 기준</h3>
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>TurboQuant에 맞는 데이터</h4>
+      <ul style="color:var(--green);font-size:0.9rem;padding-left:1.2rem;">
+        <li>차원 50 이상</li>
+        <li>동일하거나 비슷한 스케일</li>
+        <li>개별 값보다 <strong>패턴/분포</strong>가 중요</li>
+        <li>유사도 비교(내적)에 사용</li>
+      </ul>
+    </div>
+    <div class="chart-box">
+      <h4>TurboQuant에 안 맞는 데이터</h4>
+      <ul style="color:var(--red);font-size:0.9rem;padding-left:1.2rem;">
+        <li>차원 20 이하</li>
+        <li>스케일이 크게 다른 필드 혼합</li>
+        <li>개별 값 정확도가 중요 (API 응답에 직접 표시)</li>
+        <li>문자열 / 바이너리 / 인덱스</li>
+        <li>이미 정수이거나 범위가 극히 좁은 값</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- CH4: PoC 결과 -->
+<div class="card" id="ch4">
+  <h2><span class="tag tag-ch">CH.4</span> PoC 결과: 6단계 검증</h2>
+
+  <div class="kpi-row">
+    <div class="kpi green"><div class="value">100%</div><div class="label">이상 탐지 재현율 (3/3)</div></div>
+    <div class="kpi cyan"><div class="value">59.6%</div><div class="label">클러스터 정확도 (QJL=128)</div></div>
+    <div class="kpi purple"><div class="value">8.57x</div><div class="label">최고 압축률 (3-bit)</div></div>
+    <div class="kpi yellow"><div class="value">75%</div><div class="label">이상 탐지 F1 점수</div></div>
+    <div class="kpi blue"><div class="value">289ns</div><div class="label">복원 속도 (레코드당)</div></div>
+  </div>
+
+  <table>
+    <tr><th>Phase</th><th>작업</th><th>핵심 결과</th><th>판정</th></tr>
+    <tr><td>1</td><td>YARD 데모 생성기</td><td>NetHead 프로토콜 구현, 5 에이전트 300팩 전송 성공</td><td><span class="badge badge-green">성공</span></td></tr>
+    <tr><td>2</td><td>시계열 압축 벤치마크</td><td>3-bit 8.57x, 4-bit 6.97x (단, MSE 높음)</td><td><span class="badge badge-yellow">제한적</span></td></tr>
+    <tr><td>3</td><td>벡터 유사도 검색</td><td>50에이전트 5클러스터, 클러스터 정확도 51.6%</td><td><span class="badge badge-green">성공</span></td></tr>
+    <tr><td>4</td><td>이상 탐지</td><td>3종 이상 100% 탐지, F1 75%</td><td><span class="badge badge-green">성공</span></td></tr>
+    <tr><td>5</td><td>캐싱 최적화</td><td>QR 분해 캐싱 4.5x 속도 향상</td><td><span class="badge badge-green">성공</span></td></tr>
+    <tr><td>6</td><td>QJL 차원 튜닝</td><td>QJL 128에서 클러스터 정확도 59.6% (+8p)</td><td><span class="badge badge-green">성공</span></td></tr>
+  </table>
+</div>
+
+<!-- CH5: 왜 저장에 안 맞는가 -->
+<div class="card" id="ch5">
+  <h2><span class="tag tag-ch">CH.5</span> 핵심 발견: 왜 저장 압축에는 안 맞는가</h2>
+
+  <p>PoC Phase 2에서 압축률 8.57x를 달성했지만, 실제 API 응답값을 비교하면 <strong>사용 불가능한 수준의 오차</strong>가 발생합니다.</p>
+
+  <h3>대시보드 표시 비교 (TurboQuant 4-bit, dim=5)</h3>
+  <table>
+    <tr><th>메트릭</th><th>원본</th><th>TQ 복원</th><th>차이</th><th>판정</th></tr>
+    <tr><td>CPU (%)</td><td>52.7%</td><td style="color:var(--red)">36.8%</td><td>-15.9</td><td><span class="badge badge-red">사용 불가</span></td></tr>
+    <tr><td>Memory (%)</td><td>71.3%</td><td style="color:var(--red)">64.2%</td><td>-7.1</td><td><span class="badge badge-red">사용 불가</span></td></tr>
+    <tr><td>TPS</td><td>627</td><td style="color:var(--red)">564</td><td>-63</td><td><span class="badge badge-red">사용 불가</span></td></tr>
+    <tr><td>Response Time</td><td>2007ms</td><td style="color:var(--red)">1807ms</td><td>-200</td><td><span class="badge badge-red">사용 불가</span></td></tr>
+  </table>
+
+  <div class="insight bad">
+    <strong>원인: 랜덤 회전 행렬이 서로 다른 스케일의 값을 섞습니다.</strong><br>
+    CPU(0~100)와 TPS(0~10000)를 같은 벡터에 넣으면, 회전 후 각 좌표에 두 메트릭의 정보가 혼합됩니다. 양자화 오차가 역회전 시 원래 스케일로 증폭되어 돌아옵니다.
+    LLM의 임베딩은 모든 차원이 비슷한 스케일(-1~1)이라 이 문제가 없습니다.
+  </div>
+
+  <h3>비교: 스칼라 8-bit (단순 형변환)</h3>
+  <table>
+    <tr><th>메트릭</th><th>원본</th><th>스칼라 8-bit</th><th>차이</th><th>판정</th></tr>
+    <tr><td>CPU (%)</td><td>52.7%</td><td>52.5%</td><td>-0.2</td><td><span class="badge badge-green">OK</span></td></tr>
+    <tr><td>Memory (%)</td><td>71.3%</td><td>71.4%</td><td>+0.1</td><td><span class="badge badge-green">OK</span></td></tr>
+    <tr><td>TPS</td><td>627</td><td>625</td><td>-2</td><td><span class="badge badge-green">OK</span></td></tr>
+    <tr><td>GC Count</td><td>15.4</td><td>15.4</td><td>0</td><td><span class="badge badge-green">동일</span></td></tr>
+  </table>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>방법별 상대오차 비교 (CPU % 기준)</h4>
+      <canvas id="chartAccuracy"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>압축률 vs 정확도 트레이드오프</h4>
+      <canvas id="chartTradeoff"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- CH6: 튜닝 시도 -->
+<div class="card" id="ch6">
+  <h2><span class="tag tag-ch">CH.6</span> 튜닝 시도와 한계</h2>
+
+  <p>TurboQuant의 오차를 줄이기 위해 5가지 튜닝을 시도했습니다.</p>
+
+  <table>
+    <tr><th>튜닝 방법</th><th>상대오차</th><th>압축률</th><th>결과</th></tr>
+    <tr><td>현재: TQ 4-bit, dim=5</td><td class="num" style="color:var(--red)">28.17%</td><td class="num">2.9x</td><td><span class="badge badge-red">부족</span></td></tr>
+    <tr><td>비트 증가: TQ 6-bit</td><td class="num" style="color:var(--yellow)">10.72%</td><td class="num">2.5x</td><td><span class="badge badge-yellow">여전히 부족</span></td></tr>
+    <tr><td>비트 증가: TQ 8-bit</td><td class="num" style="color:var(--yellow)">7.13%</td><td class="num">2.2x</td><td><span class="badge badge-yellow">여전히 부족</span></td></tr>
+    <tr><td>시간 배치: dim=100</td><td class="num" style="color:var(--red)">39.50%</td><td class="num">7.4x</td><td><span class="badge badge-red">더 나빠짐</span></td></tr>
+    <tr><td>델타 인코딩 + TQ</td><td class="num" style="color:var(--red)">2200%</td><td class="num">6.1x</td><td><span class="badge badge-red">완전 파탄</span></td></tr>
+    <tr style="background:rgba(34,197,94,0.05);">
+      <td><strong>회전 제거: codebook만 8-bit</strong></td><td class="num" style="color:var(--green)">0.69%</td><td class="num">1.2x</td><td><span class="badge badge-green">정확</span> (압축률 낮음)</td></tr>
+    <tr style="background:rgba(34,197,94,0.05);">
+      <td><strong>스칼라 8-bit</strong></td><td class="num" style="color:var(--green)">0.49%</td><td class="num">4.0x</td><td><span class="badge badge-green">최적</span></td></tr>
+  </table>
+
+  <div class="insight">
+    <strong>결론: 회전 행렬이 오차의 근본 원인입니다.</strong>
+    회전을 제거하면 오차가 0.69%로 떨어지지만, 회전을 빼면 TurboQuant가 아니라 그냥 codebook 양자화입니다. 모니터링 데이터 저장에는 <strong>단순한 스칼라 양자화가 구조적으로 최적</strong>입니다.
+  </div>
+</div>
+
+<!-- CH7: 실제 데이터 분석 -->
+<div class="card" id="ch7">
+  <h2><span class="tag tag-ch">CH.7</span> 실제 WhaTap 데이터 분석</h2>
+
+  <p>로컬 yardbase의 실제 .dat2 파일 149개(639 레코드, 47 카테고리)를 파싱하여 분석했습니다.</p>
+
+  <h3>발견된 데이터 특성</h3>
+  <table>
+    <tr><th>특성</th><th>상세</th><th>영향</th></tr>
+    <tr><td>타입 다양성</td><td>MetricValue, Decimal, Double, Float, BlobValue 혼재</td><td>일괄 양자화 불가, 타입별 처리 필요</td></tr>
+    <tr><td>타임스탬프 혼입</td><td>Decimal 필드에 epoch ms (1770009529000) 포함</td><td>양자화 대상에서 반드시 제외</td></tr>
+    <tr><td>좁은 범위</td><td>count=1~2, 세션수=1~1 같은 상수 필드 다수</td><td>양자화 이점 없음</td></tr>
+    <tr><td>희소 분포</td><td>대부분 0, 간헐적 큰 값 (page_load: 1 or 296)</td><td>균등 양자화보다 log-scale이 적합</td></tr>
+  </table>
+
+  <h3>실데이터 양자화 오차 (카테고리별 대표)</h3>
+  <table>
+    <tr><th>카테고리.필드</th><th>값 범위</th><th>스칼라 4-bit</th><th>스칼라 8-bit</th><th>TQ 4-bit</th><th>TQ 8-bit</th></tr>
+    <tr><td>page_load.로딩시간</td><td>27~317ms</td><td>5.31%</td><td style="color:var(--green)"><strong>0.22%</strong></td><td style="color:var(--red)">18.23%</td><td>8.74%</td></tr>
+    <tr><td>resource.전송량</td><td>0~5350</td><td>42.74%</td><td style="color:var(--green)"><strong>6.06%</strong></td><td style="color:var(--red)">267.70%</td><td>184.22%</td></tr>
+    <tr><td>web_vitals.LCP</td><td>0~80ms</td><td>2.26%</td><td style="color:var(--green)"><strong>0.13%</strong></td><td style="color:var(--red)">17.37%</td><td>10.94%</td></tr>
+    <tr><td>screen_loading.시간</td><td>가변</td><td>20.68%</td><td style="color:var(--green)"><strong>1.06%</strong></td><td style="color:var(--red)">88.32%</td><td>27.41%</td></tr>
+    <tr><td>session_count</td><td>1 (상수)</td><td>0.00%</td><td>0.00%</td><td>0.00%</td><td>0.00%</td></tr>
+    <tr><td>error_count</td><td>1 (상수)</td><td>0.00%</td><td>0.00%</td><td>0.00%</td><td>0.00%</td></tr>
+  </table>
+
+  <div class="insight">
+    <strong>실데이터에서도 동일한 결론:</strong> 모든 필드에서 스칼라 8-bit가 TurboQuant보다 10~300배 정확합니다.
+    특히 resource.전송량(범위 0~5350)에서 TurboQuant 4-bit은 267% 오차로 완전히 사용 불가능합니다.
+  </div>
+</div>
+
+<!-- CH8: 최종 적용 전략 -->
+<div class="card" id="ch8">
+  <h2><span class="tag tag-ch">CH.8</span> 최종 적용 전략</h2>
+
+  <h3>역할 분담: 저장은 스칼라, 분석은 TurboQuant</h3>
+
+  <div style="background:var(--bg);border-radius:10px;padding:1.5rem;margin:1rem 0;font-size:0.9rem;">
+    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;justify-content:center;">
+      <div style="background:rgba(59,130,246,0.1);border:1px solid var(--blue);border-radius:8px;padding:0.8rem 1.2rem;text-align:center;min-width:150px;">
+        <div style="color:var(--blue);font-weight:700;font-size:0.8rem;">저장 경로</div>
+        에이전트 데이터<br><small style="color:var(--muted)">MetricValue (float)</small>
+      </div>
+      <div style="color:var(--muted);">&rarr;</div>
+      <div style="background:rgba(34,197,94,0.1);border:1px solid var(--green);border-radius:8px;padding:0.8rem 1.2rem;text-align:center;min-width:150px;">
+        <div style="color:var(--green);font-weight:700;font-size:0.8rem;">스칼라 8-bit</div>
+        .dat2 저장<br><small style="color:var(--muted)">4x 압축, 오차 0.2%</small>
+      </div>
+      <div style="color:var(--muted);">&rarr;</div>
+      <div style="background:rgba(99,102,241,0.1);border:1px solid var(--accent);border-radius:8px;padding:0.8rem 1.2rem;text-align:center;min-width:150px;">
+        <div style="color:var(--accent);font-weight:700;font-size:0.8rem;">API 조회</div>
+        8-bit 복원<br><small style="color:var(--muted)">곱하기 1번, ~0ns</small>
+      </div>
+    </div>
+    <div style="text-align:center;color:var(--muted);margin:1rem 0 0.5rem;">동시에</div>
+    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;justify-content:center;">
+      <div style="background:rgba(59,130,246,0.1);border:1px solid var(--blue);border-radius:8px;padding:0.8rem 1.2rem;text-align:center;min-width:150px;">
+        <div style="color:var(--blue);font-weight:700;font-size:0.8rem;">분석 경로</div>
+        .dat2에서 읽기<br><small style="color:var(--muted)">8-bit 복원값 사용</small>
+      </div>
+      <div style="color:var(--muted);">&rarr;</div>
+      <div style="background:rgba(139,92,246,0.1);border:1px solid var(--accent2);border-radius:8px;padding:0.8rem 1.2rem;text-align:center;min-width:150px;">
+        <div style="color:var(--accent2);font-weight:700;font-size:0.8rem;">TurboQuant</div>
+        480차원 벡터 압축<br><small style="color:var(--muted)">메모리 인덱스 (248B/벡터)</small>
+      </div>
+      <div style="color:var(--muted);">&rarr;</div>
+      <div style="background:rgba(234,179,8,0.1);border:1px solid var(--yellow);border-radius:8px;padding:0.8rem 1.2rem;text-align:center;min-width:150px;">
+        <div style="color:var(--yellow);font-weight:700;font-size:0.8rem;">AI 분석</div>
+        유사도 검색 / 이상 탐지<br><small style="color:var(--muted)">히트맵 패턴, 서버 상태</small>
+      </div>
+    </div>
+  </div>
+
+  <h3>1순위 적용 대상: 히트맵 (HitMapPack)</h3>
+  <div class="insight good">
+    <strong>120차원, 동일 스케일(count), 패턴 비교 목적</strong> &mdash; TurboQuant가 설계된 정확한 시나리오입니다.<br><br>
+    가능한 기능:<br>
+    &bull; "지금 히트맵과 비슷한 과거 시점 찾기" (장애 재현 분석)<br>
+    &bull; "히트맵 분포가 갑자기 바뀌면 알림" (응답시간 분포 이상 탐지)<br>
+    &bull; "A 서비스의 히트맵과 비슷한 패턴의 다른 서비스" (영향 범위 추적)
+  </div>
+
+  <h3>2순위: CounterPack 기반 서버 상태 벡터</h3>
+  <div class="insight">
+    78개 필드를 정규화하여 "서버 상태 스냅샷" 벡터로 만들고, TurboQuant로 압축하여 메모리에서 검색.<br>
+    PoC Phase 3~4에서 검증 완료: 클러스터 정확도 59.6%, 이상 탐지 F1 75%.
+  </div>
+
+  <h3>성능 영향</h3>
+  <table>
+    <tr><th></th><th>스칼라 8-bit (저장)</th><th>TurboQuant (분석)</th></tr>
+    <tr><td>복원 속도</td><td><strong>~0 ns</strong> (곱하기 1번)</td><td><strong>289 ns</strong> (codebook + 역회전)</td></tr>
+    <tr><td>1000 레코드 조회</td><td>~0 ms</td><td>0.29 ms</td></tr>
+    <tr><td>API 응답 영향</td><td>없음</td><td>0.29% (100ms 기준)</td></tr>
+    <tr><td>저장 공간</td><td>4x 압축</td><td>메모리 only (248B/벡터)</td></tr>
+  </table>
+</div>
+
+<!-- CH9: 다음 단계 -->
+<div class="card" id="ch9">
+  <h2><span class="tag tag-ch">CH.9</span> 다음 단계</h2>
+
+  <h3>즉시 가능</h3>
+  <table>
+    <tr><th>작업</th><th>변경 범위</th><th>효과</th></tr>
+    <tr>
+      <td><strong>히트맵 패턴 검색 서비스</strong></td>
+      <td>신규 모듈 (YARD 소스 미수정)</td>
+      <td>"이 시점의 히트맵과 비슷한 과거 시점" 검색 기능</td>
+    </tr>
+    <tr>
+      <td><strong>서버 상태 이상 탐지</strong></td>
+      <td>신규 모듈 (YARD 소스 미수정)</td>
+      <td>복합 메트릭 기반 AI 이상 감지, EventPack 알림 연동</td>
+    </tr>
+  </table>
+
+  <h3>추가 검토 필요</h3>
+  <table>
+    <tr><th>작업</th><th>선행 조건</th><th>기대 효과</th></tr>
+    <tr>
+      <td>.dat2 스칼라 8-bit 저장</td>
+      <td>SHARD_W/TagCountDB 수정 (2파일), 전체 스택 E2E 테스트</td>
+      <td>저장 공간 75% 절감</td>
+    </tr>
+    <tr>
+      <td>KLL Quantile 벡터 검색</td>
+      <td>퍼센타일 스케치 → float[] 변환 로직</td>
+      <td>"이 URL과 응답 분포가 비슷한 URL" 검색</td>
+    </tr>
+    <tr>
+      <td>ActiveStack 클러스터링</td>
+      <td>호출 해시 시퀀스 → 고정 차원 임베딩 로직</td>
+      <td>유사 스택 자동 그룹핑</td>
+    </tr>
+  </table>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <p>TurboQuant x WhaTap YARD 적용 분석 보고서</p>
+  <p>논문: <a href="https://arxiv.org/abs/2504.19874" style="color:var(--accent)">arxiv.org/abs/2504.19874</a> |
+     소스: <a href="https://github.com/whatap/yard_poc_TurboQuant" style="color:var(--accent)">whatap/yard_poc_TurboQuant</a></p>
+</div>
+
+</div>
+
+<script>
+Chart.defaults.color='#9ca3af';Chart.defaults.borderColor='#2a2d3a';Chart.defaults.font.family="'Inter',sans-serif";
+
+// CH5: 정확도 비교
+new Chart(document.getElementById('chartAccuracy'),{type:'bar',data:{
+  labels:['TQ 4-bit\n(현재)','TQ 6-bit','TQ 8-bit','정규화+\nTQ 4-bit','codebook만\n8-bit','스칼라\n8-bit'],
+  datasets:[{label:'상대오차 (%)',data:[28.17,10.72,7.13,28.17,0.69,0.49],
+    backgroundColor:['#ef4444','#ef4444','#eab308','#ef4444','#22c55e','#22c55e'],borderRadius:6}]
+},options:{plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:'상대오차 (%)'},beginAtZero:true}}}});
+
+// CH5: 트레이드오프
+new Chart(document.getElementById('chartTradeoff'),{type:'scatter',data:{
+  datasets:[
+    {label:'TQ 4-bit',data:[{x:2.9,y:28.17}],backgroundColor:'#ef4444',pointRadius:10},
+    {label:'TQ 6-bit',data:[{x:2.5,y:10.72}],backgroundColor:'#eab308',pointRadius:10},
+    {label:'TQ 8-bit',data:[{x:2.2,y:7.13}],backgroundColor:'#eab308',pointRadius:10},
+    {label:'codebook 8-bit',data:[{x:1.2,y:0.69}],backgroundColor:'#3b82f6',pointRadius:10},
+    {label:'스칼라 8-bit',data:[{x:4.0,y:0.49}],backgroundColor:'#22c55e',pointRadius:14,pointStyle:'star'},
+  ]
+},options:{plugins:{legend:{position:'bottom',labels:{font:{size:11}}}},
+  scales:{x:{title:{display:true,text:'압축률 (x)'},min:0,max:5},y:{title:{display:true,text:'상대오차 (%)'},min:0,max:35}}}});
+</script>
+</body>
+</html>
