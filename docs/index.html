@@ -447,6 +447,16 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
 
 <h4 style="color:var(--green)">TurboQuant 적용 가능</h4>
 
+<div class="analogy green">
+  <span class="label">공통 이유: 원본 값이 아니라 패턴을 비교하는 데이터</span>
+  아래 데이터들의 공통점은 <strong>개별 값의 정확도보다 "전체 모양이 비슷한가?"가 중요</strong>하다는 것이다.<br><br>
+  히트맵은 120개 버킷의 <strong>분포 형태</strong>로 "느린 구간이 많은지"를 판단한다.
+  서버 카운터는 78개 메트릭의 <strong>조합 패턴</strong>으로 "이 서버가 정상인지"를 판단한다.
+  퍼센타일은 응답시간의 <strong>분포 곡선</strong>으로 "이 URL이 느려졌는지"를 판단한다.<br><br>
+  이런 <strong>분석/통계 데이터</strong>는 개별 숫자 하나가 약간 틀려도 전체 패턴은 유지된다.
+  TurboQuant가 정확히 잘하는 것 — <strong>"패턴(내적/유사도)을 보존하면서 압축"</strong> — 이 여기에 딱 맞는다.
+</div>
+
 <div style="background:#fff;border:2px solid var(--green);border-radius:14px;padding:24px;margin:20px 0;box-shadow:var(--shadow)">
   <h4 style="margin-top:0;color:var(--green)">1. 히트맵 (HitMapPack) — 최적 대상</h4>
   <div class="stats" style="margin:12px 0">
@@ -506,15 +516,27 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
 </div>
 
 <h4 style="color:var(--red)">TurboQuant 적용 불가</h4>
+
+<div class="analogy red">
+  <span class="label">공통 이유: 원본 값을 그대로 돌려줘야 한다</span>
+  아래 데이터들의 공통점은 <strong>API가 저장된 값을 원본 그대로 사용자에게 보여준다</strong>는 것이다.<br><br>
+  대시보드에 "CPU 52.7%"라고 표시해야 하는데 "36.8%"가 나오면 안 된다.
+  SQL 문이 <code>SELECT * FROM users</code>인데 글자가 바뀌면 안 된다.
+  인덱스 위치가 1바이트라도 틀리면 데이터를 아예 못 찾는다.<br><br>
+  TurboQuant는 <strong>"패턴이 비슷한가?"를 비교하는 용도</strong>로 만들어졌지,
+  <strong>"원본을 정확히 복원하는 용도"</strong>가 아니다.
+  원본 저장이 목적인 데이터에는 구조적으로 맞지 않는다.
+</div>
+
 <table>
 <tr><th>데이터</th><th>왜 안 되나</th><th>대안</th></tr>
-<tr><td><strong>차원별 메트릭</strong> (TagCountPack .dat2)</td><td>숫자 5개뿐(저차원). API가 개별 값을 직접 표시하므로 정확도 필수.</td><td>맞춤 눈금 5~8-bit</td></tr>
+<tr><td><strong>차원별 메트릭</strong> (TagCountPack .dat2)</td><td>숫자 5개뿐(저차원). API가 개별 값을 직접 표시.</td><td>맞춤 눈금 5~8-bit</td></tr>
 <tr><td><strong>통계 집계</strong> (StatGeneralPack)</td><td>행 수가 가변적이고, 컬럼마다 스케일이 다름.</td><td>컬럼별 맞춤 눈금</td></tr>
-<tr><td><strong>호출 스택</strong> (ActiveStackPack)</td><td>해시값 시퀀스라 양자화하면 의미가 달라짐.</td><td>별도 임베딩 필요</td></tr>
-<tr><td><strong>트랜잭션 프로필</strong> (ProfilePack)</td><td>바이너리 스텝 시퀀스. 숫자 벡터가 아님.</td><td>별도 임베딩 필요</td></tr>
-<tr><td><strong>텍스트</strong> (hvtxt)</td><td>URL, SQL 등 문자열. 숫자가 아님.</td><td>LZ4, Zstd 압축</td></tr>
-<tr><td><strong>구조화 로그</strong> (LogSinkPack)</td><td>숫자 필드가 3~8개뿐(저차원). 본문은 문자열.</td><td>숫자: 맞춤 눈금 / 문자열: Zstd</td></tr>
-<tr><td><strong>인덱스/메타</strong> (.tim, .tags, .dat)</td><td>데이터를 찾기 위한 위치 포인터. 1비트라도 틀리면 데이터를 못 찾음.</td><td>변경 불가</td></tr>
+<tr><td><strong>호출 스택</strong> (ActiveStackPack)</td><td>해시값 시퀀스. 양자화하면 다른 함수를 가리킴.</td><td>별도 임베딩 필요</td></tr>
+<tr><td><strong>트랜잭션 프로필</strong> (ProfilePack)</td><td>바이너리 스텝 시퀀스. 1비트 바뀌면 다른 실행 과정.</td><td>별도 임베딩 필요</td></tr>
+<tr><td><strong>텍스트</strong> (hvtxt)</td><td>URL, SQL 등 문자열. 글자가 바뀌면 의미가 달라짐.</td><td>LZ4, Zstd 압축</td></tr>
+<tr><td><strong>구조화 로그</strong> (LogSinkPack)</td><td>숫자 필드 3~8개(저차원). 본문은 문자열.</td><td>숫자: 맞춤 눈금 / 문자열: Zstd</td></tr>
+<tr><td><strong>인덱스/메타</strong> (.tim, .tags, .dat)</td><td>위치 포인터. 1비트 틀리면 데이터를 못 찾음.</td><td>변경 불가</td></tr>
 </table>
 
 <h3>이 PoC에서 배운 것</h3>
