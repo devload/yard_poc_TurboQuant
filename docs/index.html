@@ -367,22 +367,154 @@ TPS(500)가 CPU에 섞임 → 파괴</code></pre>
   <div class="step"><strong>분석 경로 (메모리)</strong><br>.dat2 복원값 → 그룹 회전 TurboQuant 압축 → 메모리 인덱스<br><span style="color:var(--muted)">248B/벡터, 유사도 검색 & 이상 탐지</span></div>
 </div>
 
-<h3>YARD 데이터 적용 가능성</h3>
+<h3>YARD에는 어떤 데이터가 있나?</h3>
 
-<h4 style="color:var(--green)">✅ TurboQuant 적용 가능</h4>
+<p>적용 가능성을 판단하려면 먼저 YARD가 저장하는 데이터 종류를 알아야 한다. YARD는 모니터링 에이전트가 보내는 다양한 형태의 데이터를 받아서 저장한다.</p>
+
 <table>
-<tr><th>데이터</th><th>차원</th><th>이유</th><th>활용</th></tr>
-<tr><td><strong>히트맵 (HitMapPack)</strong></td><td>120</td><td>동일 스케일(count), 고차원</td><td>히트맵 패턴 비교, 이상 시점 탐지</td></tr>
-<tr><td><strong>CounterPack</strong></td><td>78</td><td>그룹 회전으로 스케일 분리</td><td>서버 상태 유사도 검색</td></tr>
-<tr><td><strong>KLL Quantile</strong></td><td>50~100</td><td>동일 스케일(ms)</td><td>응답 분포 비교</td></tr>
+<tr><th>데이터</th><th>설명</th><th>형태</th><th>저장 위치</th></tr>
+<tr>
+  <td><strong>히트맵</strong><br>(HitMapPack)</td>
+  <td>트랜잭션 응답시간을 120개 구간(0~80초)으로 나눈 분포도.<br>대시보드의 "히트맵 차트"에 표시되는 데이터.</td>
+  <td>int[120] — 숫자 120개</td>
+  <td>db3tx/</td>
+</tr>
+<tr>
+  <td><strong>서버 카운터</strong><br>(CounterPack)</td>
+  <td>에이전트가 5초마다 보내는 서버 상태 스냅샷.<br>CPU, 메모리, TPS, GC, SQL 수, 응답시간 등 78개 필드.</td>
+  <td>float/int 78개</td>
+  <td>캐시 → 큐브</td>
+</tr>
+<tr>
+  <td><strong>차원별 메트릭</strong><br>(TagCountPack)</td>
+  <td>브라우저별, 페이지별, 국가별 등 <strong>태그 조합별로 집계된 메트릭</strong>.<br>count, sum, min, max, last 5개 값으로 구성.</td>
+  <td>MetricValue(float 5개)</td>
+  <td>tagc/*.dat2</td>
+</tr>
+<tr>
+  <td><strong>퍼센타일 분포</strong><br>(KLL Quantile)</td>
+  <td>응답시간의 P50, P75, P90, P95, P99를 계산하기 위한 분포 스케치.</br>내부적으로 정렬된 float 배열.</td>
+  <td>sorted float[50~100]</td>
+  <td>큐브</td>
+</tr>
+<tr>
+  <td><strong>통계 집계</strong><br>(StatGeneralPack)</td>
+  <td>URL별, SQL별 통계 테이블. 호출수, 평균시간, 에러율 등.</td>
+  <td>테이블(행×열)</td>
+  <td>db3/</td>
+</tr>
+<tr>
+  <td><strong>호출 스택</strong><br>(ActiveStackPack)</td>
+  <td>현재 실행 중인 트랜잭션의 함수 호출 스택.</td>
+  <td>int[] 해시 시퀀스</td>
+  <td>캐시</td>
+</tr>
+<tr>
+  <td><strong>트랜잭션 프로필</strong><br>(ProfilePack)</td>
+  <td>개별 트랜잭션의 실행 과정 — SQL, HTTP 호출, 메서드 호출 순서.</td>
+  <td>byte[] 바이너리</td>
+  <td>db3tx/</td>
+</tr>
+<tr>
+  <td><strong>텍스트 데이터</strong><br>(hvtxt)</td>
+  <td>URL, SQL 문, 클래스명 등 문자열의 해시→텍스트 매핑.</td>
+  <td>문자열</td>
+  <td>hvtxt/</td>
+</tr>
+<tr>
+  <td><strong>구조화 로그</strong><br>(LogSinkPack)</td>
+  <td>브라우저 에러, Web Vitals, 크래시 로그 등.<br>태그(문자열) + 숫자 필드(3~8개)로 구성.</td>
+  <td>문자열 + 숫자</td>
+  <td>logsink1/</td>
+</tr>
+<tr>
+  <td><strong>인덱스/메타</strong><br>(.tim, .tags, .dat)</td>
+  <td>시간 인덱스, 태그 필드명 사전, 팩 헤더. 데이터를 찾기 위한 포인터.</td>
+  <td>위치/이름</td>
+  <td>tagc/</td>
+</tr>
 </table>
 
-<h4 style="color:var(--red)">❌ TurboQuant 적용 불가</h4>
+<div class="analogy blue">
+  <span class="label">핵심 질문</span>
+  이 중에서 TurboQuant가 효과적인 건 어떤 데이터일까?<br>
+  판단 기준은 두 가지다:<br>
+  &nbsp;&nbsp;1. <strong>숫자 배열이 충분히 긴가?</strong> (차원 50 이상)<br>
+  &nbsp;&nbsp;2. <strong>값들의 크기(스케일)가 비슷한가?</strong> (또는 그룹으로 나눌 수 있는가?)
+</div>
+
+<h3>YARD 데이터 적용 가능성</h3>
+
+<h4 style="color:var(--green)">TurboQuant 적용 가능</h4>
+
+<div style="background:#fff;border:2px solid var(--green);border-radius:14px;padding:24px;margin:20px 0;box-shadow:var(--shadow)">
+  <h4 style="margin-top:0;color:var(--green)">1. 히트맵 (HitMapPack) — 최적 대상</h4>
+  <div class="stats" style="margin:12px 0">
+    <div class="stat green"><div class="num">120</div><div class="label">차원 (응답시간 버킷)</div></div>
+    <div class="stat blue"><div class="num">~7x</div><div class="label">예상 압축률 (4-bit)</div></div>
+    <div class="stat purple"><div class="num">248B</div><div class="label">히트맵 1건 압축 크기</div></div>
+  </div>
+  <p><strong>왜 적합한가:</strong> 120개 값이 모두 "건수(count)"로 같은 스케일. 회전해도 섞이는 문제가 없다.</p>
+  <p><strong>가능한 기능:</strong></p>
+  <ul>
+    <li>"지금 히트맵과 <strong>비슷한 모양의 과거 시점</strong> 찾기" — 장애 재현 분석에 활용</li>
+    <li>"히트맵 분포가 <strong>갑자기 바뀌면 알림</strong>" — 응답시간 패턴 이상 탐지</li>
+    <li>"A 서비스의 히트맵과 <strong>비슷한 패턴의 다른 서비스</strong>" — 장애 영향 범위 추적</li>
+  </ul>
+  <div class="analogy green" style="margin-bottom:0">
+    <span class="label">비즈니스 임팩트</span>
+    현재 히트맵은 "눈으로 보고 비교"해야 한다. 이 기능이 있으면 <strong>"지난주 화요일 오후 3시에도 이런 패턴이었습니다"</strong>를 자동으로 알려줄 수 있다. 장애 분석 시간을 크게 줄일 수 있는 기능이다.
+  </div>
+</div>
+
+<div style="background:#fff;border:2px solid var(--accent);border-radius:14px;padding:24px;margin:20px 0;box-shadow:var(--shadow)">
+  <h4 style="margin-top:0;color:var(--accent)">2. 서버 카운터 (CounterPack) — 그룹 회전 적용</h4>
+  <div class="stats" style="margin:12px 0">
+    <div class="stat blue"><div class="num">78</div><div class="label">차원 (메트릭 필드 수)</div></div>
+    <div class="stat green"><div class="num">0.35%</div><div class="label">그룹 회전 8-bit 오차</div></div>
+    <div class="stat purple"><div class="num">100%</div><div class="label">PoC 이상 탐지 재현율</div></div>
+  </div>
+  <p><strong>왜 적합한가:</strong> CPU/메모리/TPS 등 스케일이 다르지만, 비슷한 범위끼리 그룹으로 나눠 회전하면 해결된다.</p>
+  <p><strong>가능한 기능:</strong></p>
+  <ul>
+    <li>"이 서버와 <strong>메트릭 패턴이 비슷한 서버 목록</strong>" — 같은 역할의 서버 자동 그룹핑</li>
+    <li>"CPU는 정상인데 TPS와 GC가 동시에 이상" 같은 <strong>복합 이상 탐지</strong> — 단일 threshold 알림으로는 못 잡는 것</li>
+    <li>장애 발생 시 <strong>"영향 받은 서버 자동 식별"</strong> — 비슷한 패턴 변화를 보이는 서버 즉시 리스트업</li>
+  </ul>
+  <div class="analogy blue" style="margin-bottom:0">
+    <span class="label">비즈니스 임팩트</span>
+    현재 WhaTap 알림은 "CPU > 90%"처럼 <strong>단일 메트릭 threshold</strong>다. 하지만 실제 장애는 "CPU는 70%인데 GC가 치솟고 TPS가 떨어지는" 복합 패턴인 경우가 많다. 78개 메트릭을 동시에 보는 벡터 기반 탐지는 <strong>기존 알림이 놓치는 장애를 잡을 수 있다</strong>.
+  </div>
+</div>
+
+<div style="background:#fff;border:2px solid var(--purple);border-radius:14px;padding:24px;margin:20px 0;box-shadow:var(--shadow)">
+  <h4 style="margin-top:0;color:var(--purple)">3. 퍼센타일 분포 (KLL Quantile)</h4>
+  <div class="stats" style="margin:12px 0">
+    <div class="stat purple"><div class="num">50~100</div><div class="label">차원 (정렬된 float)</div></div>
+    <div class="stat blue"><div class="num">~6x</div><div class="label">예상 압축률</div></div>
+  </div>
+  <p><strong>왜 적합한가:</strong> 모두 "밀리초(ms)" 단위로 같은 스케일. 정렬된 float 배열이라 분포의 "모양"을 벡터로 표현할 수 있다.</p>
+  <p><strong>가능한 기능:</strong></p>
+  <ul>
+    <li>"이 URL과 <strong>응답시간 분포가 비슷한 URL</strong>" — 느린 API 패턴 분석</li>
+    <li>"P99가 갑자기 바뀐 URL 자동 감지" — 퍼센타일 분포 형태 변화 탐지</li>
+  </ul>
+  <div class="analogy purple" style="margin-bottom:0">
+    <span class="label">비즈니스 임팩트</span>
+    특정 URL이 느려졌을 때 <strong>"이 URL과 비슷한 패턴의 다른 URL도 느려졌나?"</strong>를 즉시 확인할 수 있다. 동일 DB를 사용하는 API들이 함께 느려지는 패턴을 자동으로 묶어서 <strong>근본 원인을 빠르게 좁힐 수 있다</strong>.
+  </div>
+</div>
+
+<h4 style="color:var(--red)">TurboQuant 적용 불가</h4>
 <table>
-<tr><th>데이터</th><th>이유</th><th>대안</th></tr>
-<tr><td><strong>TagCount .dat2 (값 저장)</strong></td><td>저차원(5), 개별 값 정확도 필요</td><td>맞춤 눈금(적응형 코드북) 또는 스칼라 8-bit</td></tr>
-<tr><td><strong>텍스트/인덱스/로그</strong></td><td>숫자가 아님</td><td>LZ4, Zstd 등</td></tr>
-<tr><td><strong>타임스탬프</strong></td><td>정확해야 함</td><td>delta encoding</td></tr>
+<tr><th>데이터</th><th>왜 안 되나</th><th>대안</th></tr>
+<tr><td><strong>차원별 메트릭</strong> (TagCountPack .dat2)</td><td>숫자 5개뿐(저차원). API가 개별 값을 직접 표시하므로 정확도 필수.</td><td>맞춤 눈금 5~8-bit</td></tr>
+<tr><td><strong>통계 집계</strong> (StatGeneralPack)</td><td>행 수가 가변적이고, 컬럼마다 스케일이 다름.</td><td>컬럼별 맞춤 눈금</td></tr>
+<tr><td><strong>호출 스택</strong> (ActiveStackPack)</td><td>해시값 시퀀스라 양자화하면 의미가 달라짐.</td><td>별도 임베딩 필요</td></tr>
+<tr><td><strong>트랜잭션 프로필</strong> (ProfilePack)</td><td>바이너리 스텝 시퀀스. 숫자 벡터가 아님.</td><td>별도 임베딩 필요</td></tr>
+<tr><td><strong>텍스트</strong> (hvtxt)</td><td>URL, SQL 등 문자열. 숫자가 아님.</td><td>LZ4, Zstd 압축</td></tr>
+<tr><td><strong>구조화 로그</strong> (LogSinkPack)</td><td>숫자 필드가 3~8개뿐(저차원). 본문은 문자열.</td><td>숫자: 맞춤 눈금 / 문자열: Zstd</td></tr>
+<tr><td><strong>인덱스/메타</strong> (.tim, .tags, .dat)</td><td>데이터를 찾기 위한 위치 포인터. 1비트라도 틀리면 데이터를 못 찾음.</td><td>변경 불가</td></tr>
 </table>
 
 <h3>이 PoC에서 배운 것</h3>
