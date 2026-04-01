@@ -105,33 +105,91 @@ footer a{color:var(--accent);text-decoration:none}
 
 <!-- TQ 데이터 -->
 <chapter id="tq-data">
-<h2>TurboQuant 인코딩 데이터</h2>
+<h2>YARD 데이터와 이상 탐지</h2>
 
-<p>B 서버의 .dat2 파일 중 <strong>12개가 TurboQuant로 인코딩</strong>되고, 7개는 원본(float 없거나 3개 미만).</p>
+<p>이 PoC의 목적은 <strong>압축이 아니라 이상 탐지</strong>입니다. YARD에 쌓이는 모든 데이터를 이상 탐지 관점에서 분류합니다.</p>
 
-<h3>TQ 적용된 카테고리</h3>
+<h3>이상 탐지에 사용하는 데이터</h3>
+
+<p>TurboQuant는 숫자 벡터의 <strong>패턴 변화</strong>를 감지합니다. float든 Decimal이든 숫자이면 벡터로 만들 수 있고, 벡터가 되면 이상 탐지 대상입니다.</p>
+
 <table>
-  <tr><th>카테고리</th><th>파일 수</th><th>크기</th><th>내용</th></tr>
-  <tr><td><strong>app_counter</strong></td><td>5</td><td>1.5 MB</td><td>서버 카운터 (CPU, TPS, GC 등) — raw + {m1} + {m5}</td></tr>
-  <tr><td><strong>app_host_resource</strong></td><td>3</td><td>320 KB</td><td>호스트 리소스 (메모리, 디스크) — raw + {m1} + {m5}</td></tr>
-  <tr><td><strong>app_counter_project</strong></td><td>2</td><td>17 KB</td><td>프로젝트 카운터 — raw + {m5}</td></tr>
-  <tr><td><strong>app_proc_counter</strong></td><td>2</td><td>61 KB</td><td>프로세스 카운터 — {m1} + {m5} 집계</td></tr>
+  <tr><th>카테고리</th><th>데이터 타입</th><th>벡터 차원</th><th>이상 탐지 용도</th><th>현재 상태</th></tr>
+  <tr style="background:var(--light-green);">
+    <td><strong>app_counter</strong></td><td>Float 39개</td><td>39</td>
+    <td>서버 상태 패턴 변화 (CPU, TPS, GC, 응답시간 동시 비교)</td>
+    <td><strong>적용 완료</strong></td>
+  </tr>
+  <tr style="background:var(--light-green);">
+    <td><strong>app_host_resource</strong></td><td>Float 10개</td><td>10</td>
+    <td>호스트 리소스 변화 (메모리, 디스크, 네트워크)</td>
+    <td><strong>적용 완료</strong></td>
+  </tr>
+  <tr style="background:var(--light-green);">
+    <td><strong>app_counter_project</strong></td><td>Float 10개 + Decimal</td><td>10+</td>
+    <td>프로젝트 전체 상태 변화</td>
+    <td><strong>적용 완료</strong></td>
+  </tr>
+  <tr style="background:var(--light-green);">
+    <td><strong>app_proc_counter {m1},{m5}</strong></td><td>Float + Decimal</td><td>가변</td>
+    <td>프로세스별 리소스 이상</td>
+    <td><strong>적용 완료</strong></td>
+  </tr>
+  <tr style="background:var(--light-orange);">
+    <td><strong>app_proc_counter (raw)</strong></td><td>Decimal 위주</td><td>가변</td>
+    <td>프로세스 이상 탐지 — Decimal도 벡터에 포함 가능</td>
+    <td><strong>다음 단계</strong></td>
+  </tr>
+  <tr style="background:var(--light-orange);">
+    <td><strong>app_actx_meter</strong></td><td>Float 2개 + Decimal</td><td>가변</td>
+    <td>액티브 트랜잭션 폭증/급감 감지</td>
+    <td><strong>다음 단계</strong></td>
+  </tr>
+  <tr style="background:var(--light-orange);">
+    <td><strong>agent_status_summary</strong></td><td>Decimal만</td><td>가변</td>
+    <td>에이전트 상태 변화 (갑자기 죽거나 추가되는 패턴)</td>
+    <td><strong>다음 단계</strong></td>
+  </tr>
+  <tr style="background:var(--light-orange);">
+    <td><strong>hitmap</strong></td><td>int[120]</td><td>120</td>
+    <td>응답시간 분포 변화 — <strong>TQ 최적 대상</strong></td>
+    <td><strong>다음 단계 (1순위)</strong></td>
+  </tr>
+  <tr style="background:var(--light-orange);">
+    <td><strong>alert_count</strong></td><td>Decimal</td><td>가변</td>
+    <td>알림 빈도 패턴 변화</td>
+    <td>검토 필요</td>
+  </tr>
+  <tr>
+    <td>agent_dic</td><td>메타데이터</td><td>-</td>
+    <td>에이전트 이름 사전 — 패턴 없음</td>
+    <td>대상 아님</td>
+  </tr>
 </table>
 
-<h3>TQ 미적용 카테고리</h3>
-<table>
-  <tr><th>카테고리</th><th>크기</th><th>이유</th></tr>
-  <tr><td>app_proc_counter (raw)</td><td>347 KB</td><td>float가 3개 미만</td></tr>
-  <tr><td>app_actx_meter</td><td>79 KB</td><td>float가 3개 미만</td></tr>
-  <tr><td>agent_status_summary</td><td>97 KB</td><td>Decimal만 (float 없음)</td></tr>
-  <tr><td>agent_dic, alert_count, hitmap</td><td>8 KB</td><td>float 없거나 데이터 너무 작음</td></tr>
-</table>
+<div class="box blue">
+  <span class="label">핵심: 압축 기준 ≠ 이상 탐지 기준</span>
+  <strong>압축</strong>은 "float가 3개 이상이면 효율적"이라 float 부족한 데이터를 skip했습니다.<br>
+  <strong>이상 탐지</strong>는 "숫자가 있으면 패턴을 볼 수 있다"이므로 Decimal, int도 벡터 대상입니다.<br><br>
+  현재 12개 파일에서 TQ 인코딩으로 이상 탐지가 동작 중이고,<br>
+  나머지 7개도 <strong>Decimal/int를 벡터에 포함</strong>하면 이상 탐지 대상이 됩니다.<br>
+  특히 <strong>hitmap(int[120])</strong>은 동일 스케일 120차원으로 TQ에 가장 적합합니다.
+</div>
 
-<h3>.dat2 레코드 구조</h3>
-<pre><code>원본 레코드:
-  [int3 길이][_writeMap 바이트: bool + decimal + FloatValue(4B) + ...]
+<h3>다음 단계: 이상 탐지 확장</h3>
 
-TQ 인코딩 레코드:
+<div class="flow">
+  <div class="step good"><strong>현재</strong>: Float 필드만 벡터화<br><small>app_counter(39차원), app_host_resource(10차원)</small></div>
+  <div class="arrow">↓</div>
+  <div class="step active"><strong>다음 1</strong>: Decimal/int도 벡터에 포함<br><small>app_proc_counter, agent_status, app_actx_meter → 전부 탐지 대상</small></div>
+  <div class="arrow">↓</div>
+  <div class="step active"><strong>다음 2</strong>: hitmap(int[120]) 벡터 인덱스<br><small>응답시간 분포 변화 탐지 — TQ 최적 대상, 120차원 동일 스케일</small></div>
+  <div class="arrow">↓</div>
+  <div class="step"><strong>다음 3</strong>: 크로스 인덱스 연관 분석<br><small>counter + host_resource + hitmap을 시간으로 묶어 근본 원인 추적</small></div>
+</div>
+
+<h3>현재 TQ 인코딩 레코드 구조</h3>
+<pre><code>TQ 인코딩 레코드 (.dat2 내):
   [int3 길이][0x03][origLen 2B][floatCount 2B][metaLen 2B][meta bytes][TQ compressed bytes]
                 ↑
           VERSION_TQ 헤더
@@ -140,13 +198,10 @@ TQ compressed bytes:
   TurboQuantizer(4-bit, dim=floatCount).compress(floats)
   = [4B norm] + [floatCount × 4 / 8 bytes packed indices]
 
-예: floatCount=39 → 원본 156B(39×4B) → TQ 24B(4B norm + 20B packed) = 6.5x 압축</code></pre>
+예: floatCount=39 → 원본 156B(39×4B) → TQ 24B(4B norm + 20B packed)
 
-<div class="box green">
-  <span class="label">판단 기준</span>
-  <strong>float가 3개 이상</strong>인 레코드만 TQ 인코딩. 그 이하는 오버헤드가 커서 원본 유지.<br>
-  읽기 경로에서 첫 바이트가 0x03이면 TQ 디코딩, 아니면 원본 그대로 — <strong>하위호환 100%</strong>.
-</div>
+→ 이 벡터가 .tqi에 쌓이고, 베이스라인 대비 코사인 유사도로 이상 탐지</code></pre>
+
 </chapter>
 
 <!-- TQI 벡터 인덱스 -->
